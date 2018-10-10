@@ -1,2 +1,2 @@
 coloredlogs==10.0
-pysqlcipher3==1.0.2
+pysqlcipher3==1.0.3

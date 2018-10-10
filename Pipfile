@@ -10,8 +10,5 @@ coloredlogs = "*"
 [dev-packages]
 rope = "*"
 
-[requires]
-python_version = "3.7"
-
 [scripts]
 export = "python3 export.py"
