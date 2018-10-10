@@ -18,7 +18,14 @@ Features
 Requirements
 ------------
 
-* Python 3.6/3.7 (and pip)
+### libsqlcipher
+
+`libsqlcipher` must be installed on your system prior to installation of `pysqlcipher`, so that the binary extension module can be compiled. Consult your operating system documentation for how to install SQL Cipher. You can also manually build SQL Cipher by cloning [sqlcipher](https://github.com/sqlcipher/sqlcipher) and following the build instructions.
+
+For Arch Linux, you can install the [sqlcipher](https://www.archlinux.org/packages/community/x86_64/sqlcipher/) package. For Debian, there is a [libsqlcipher-dev](https://packages.debian.org/stable/libsqlcipher-dev) package.
+
+### Python (>=3.6)
+
 * [pysqlcipher3](https://github.com/rigglemania/pysqlcipher3) (via pip)
 * [coloredlogs](https://github.com/xolox/python-coloredlogs) (via pip)
 
