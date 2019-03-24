@@ -108,6 +108,9 @@ def save_attachments(config, hashes, id, msg):
             continue
 
         name = 'signal-{}.{}'.format(sent.strftime('%Y-%m-%d-%H%M%S'), ext)
+        if not at.get("path"):
+            logger.warning('Skipping %s (path does not exist)', at.get('id'))
+            continue
         src = os.path.join(config['signalDir'], 'attachments.noindex', at['path'])
         dst = os.path.join(config['outputDir'], sender, name)
         if not os.path.exists(src):
