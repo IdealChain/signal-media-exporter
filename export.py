@@ -26,7 +26,7 @@ def get_key(config):
         signal_config = json.load(f)
 
     key = signal_config['key']
-    logger.info('Read sqlcipher key: %s', key)
+    logger.info('Read sqlcipher key: 0x%s', key)
     return key
 
 def get_messages(config, key):
@@ -101,13 +101,17 @@ def save_attachments(config, hashes, id, msg):
             logger.warning('Skipping %s (field missing: "%s")', id, '.'.join(e.args))
         return
 
-    for at in msg['attachments']:
+    for idx, at in enumerate(msg['attachments']):
         if at['contentType'].lower().startswith(('image/', 'video/', 'audio/')):
             ext = at['contentType'].lower().split('/')[1]
         else:
             continue
 
-        name = 'signal-{}.{}'.format(sent.strftime('%Y-%m-%d-%H%M%S'), ext)
+        name = ['signal', sent.strftime('%Y-%m-%d-%H%M%S')]
+        if len(msg['attachments']) > 1:
+            name += str(idx)
+        name = '{}.{}'.format('-'.join(name), ext)
+
         if not at.get("path"):
             logger.warning('Skipping %s (path does not exist)', at.get('id'))
             continue
