@@ -14,12 +14,7 @@ from pathlib import Path
 from pysqlcipher3 import dbapi2 as sqlite
 
 logger = logging.getLogger(__name__)
-sqlcipher_settings = {
-    'cipher_page_size': 1024,
-    'kdf_iter': 64000,
-    'cipher_hmac_algorithm': 'HMAC_SHA1',
-    'cipher_kdf_algorithm': 'PBKDF2_HMAC_SHA1'
-}
+sqlcipher_settings = {}
 
 def get_key(config):
     with open(os.path.join(config['signalDir'], 'config.json'), 'r') as f:
