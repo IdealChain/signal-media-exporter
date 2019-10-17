@@ -54,7 +54,6 @@ You can either just use the similar command line parameters (see `signal-media-e
 {
     "outputDir": "./media",
     "includeExpiringMessages": false,
-    "ownNumber": "+430000000000",
     "map": {
         "+430000000000": "Me",
         "+430000000001": "My buddy"
@@ -64,5 +63,4 @@ You can either just use the similar command line parameters (see `signal-media-e
 
 * `outputDir`: Output directory for media files, as a relative or absolute path. Inside this directory, subdirectories for the sender numbers or names will be created.
 * `includeExpiringMessages`: Whether to include media files from messages that are set to expire in the future.
-* `ownNumber`: Your own phone number, for mapping outgoing messages that have no sender number set. Phone numbers must be complete including the country code.
-* `map`: If you include this dict, only the media files sent by the listed numbers will be exported, and the supplied name will be used for the `outputDir` subdirectories (including your own number). If omitted, all media files will be exported using the senders' numbers as subdirectories.
+* `map`: If you include this dict, only the media files sent by the listed numbers will be exported, and the supplied name will be used for the `outputDir` subdirectories (including your own number). If omitted, all media files will be exported using the senders' numbers as subdirectories. Phone numbers must be complete including the country code.

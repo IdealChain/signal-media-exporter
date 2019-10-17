@@ -1,7 +1,6 @@
 {
     "outputDir": "./media",
     "includeExpiringMessages": false,
-    "ownNumber": "+430000000000",
     "map": {
         "+430000000000": "Me",
         "+430000000001": "My buddy"

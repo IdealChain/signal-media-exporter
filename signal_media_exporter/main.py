@@ -21,7 +21,7 @@ def get_key(config):
         signal_config = json.load(f)
 
     key = signal_config['key']
-    logger.info('Read sqlcipher key: 0x%s', key)
+    logger.info('Read sqlcipher key: 0x%s...', key[:8])
     return key
 
 def get_messages(config, key):
@@ -33,6 +33,11 @@ def get_messages(config, key):
         for setting, value in sqlcipher_settings.items():
             c.execute(f"PRAGMA {setting}={value}")
 
+        c.execute("select json from items where id=?", ('number_id',))
+        number_id = json.loads(c.fetchone()[0])
+        own_number, device_id = number_id['value'].split('.')
+        logger.info('Own number: %s, device ID: %s', own_number, device_id)
+
         cond = ["hasVisualMediaAttachments > 0"]
         if not config.get('includeExpiringMessages', False):
             cond.append("expires_at is null")
@@ -42,10 +47,14 @@ def get_messages(config, key):
             where { ' and '.join(cond) }
             order by sent_at asc
             """)
-        res = c.fetchall()
 
-        logger.info('Got %d messages with media attachments',  len(res))
-        return [(m[0], json.loads(m[1])) for m in res]
+        for row in c:
+            msg = json.loads(row[1])
+
+            if 'source' not in msg and msg['type'] == 'outgoing':
+                msg['source'] = own_number
+
+            yield (row[0], msg)
 
     finally:
         conn.close()
@@ -78,19 +87,13 @@ def save_attachments(config, hashes, id, msg):
         sent = datetime.fromtimestamp(msg['sent_at'] / 1000)
         recvd = datetime.fromtimestamp(msg['received_at'] / 1000)
 
-        if 'source' in msg:
-            sender = msg['source']
-        elif 'source' not in msg and msg['type'] == 'outgoing':
-            sender = config['ownNumber']
-
         # translate number of sender to name
+        sender = msg['source']
         if 'map' in config:
             sender = config['map'][sender]
 
     except KeyError as e:
-        if e.args[0] == 'ownNumber':
-            logger.warning('Skipping %s (own number not set)', id)
-        elif e.args[0].startswith('+'):
+        if e.args[0].startswith('+'):
             logger.warning('Skipping %s (number not mapped: "%s")', id, '.'.join(e.args))
         else:
             logger.warning('Skipping %s (field missing: "%s")', id, '.'.join(e.args))
@@ -107,13 +110,13 @@ def save_attachments(config, hashes, id, msg):
             name += str(idx)
         name = '{}.{}'.format('-'.join(name), ext)
 
-        if not at.get("path"):
-            logger.warning('Skipping %s (path does not exist)', at.get('id'))
+        if at.get('pending', False) or not at.get('path'):
+            logger.warning('Skipping %s/%s (media file not downloaded)', sender, name)
             continue
         src = os.path.join(config['signalDir'], 'attachments.noindex', at['path'])
         dst = os.path.join(config['outputDir'], sender, name)
         if not os.path.exists(src):
-            logger.warning('Skipping %s (file does not exist)', src)
+            logger.warning('Skipping %s/%s (media file not found)', sender, name)
             continue
 
         stats['attachments'] = stats['attachments'] + 1
@@ -122,11 +125,11 @@ def save_attachments(config, hashes, id, msg):
         quick_hash = hash_file_quick(src)
         if quick_hash in hashes:
             if hash_file_sha256(src) in (hash_file_sha256(f) for f in hashes[quick_hash]):
-                logger.info('Skipping %s (already saved an identical file)', dst)
+                logger.info('Skipping %s/%s (already saved an identical file)', sender, name)
                 continue
 
         if os.path.exists(dst):
-            logger.debug('Skipping %s (file exists)', dst)
+            logger.debug('Skipping %s/%s (file exists)', sender, name)
             hashes.setdefault(quick_hash, []).append(src)
             continue
 
@@ -159,8 +162,6 @@ def main():
                         help=f"Signal Desktop profile directory (default: {config['signalDir']})")
     parser.add_argument('-e', '--include-expiring-messages', action='store_const', const=True,
                         help="include expiring messages (default: no)")
-    parser.add_argument('-n', '--own-number', nargs='?', type=str,
-                        help="own phone number (sender for outgoing messages)")
     args = parser.parse_args()
 
     # command line args override the settings from the config file, which override the default settings
@@ -178,14 +179,12 @@ def main():
 
     # sanitize phone numbers: remove non-digits
     sanitize = lambda no: re.sub('[^+\d]', '', no)
-    try: config['ownNumber'] = sanitize(config['ownNumber'])
-    except KeyError: pass
     try: config['map'] = { sanitize(number): name for number, name in config['map'].items() }
     except KeyError: pass
 
     # read the encrypted DB and run the export
     key = get_key(config)
-    msgs = get_messages(config, key)
+    msgs = list(get_messages(config, key))
     stats = {}
     hashes = {}
 
