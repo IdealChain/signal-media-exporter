@@ -29,27 +29,26 @@ For Arch Linux, you can install the [sqlcipher](https://www.archlinux.org/packag
 * [pysqlcipher3](https://github.com/rigglemania/pysqlcipher3) (via pip)
 * [coloredlogs](https://github.com/xolox/python-coloredlogs) (via pip)
 
-If you have pipenv installed, you can just run:
+If you have poetry installed, you can run:
 
 ```
-$ cd signal-media-exporter
-$ pipenv run export -h
+$ poetry install
+$ poetry run signal-media-exporter -h
 ```
 
-Otherwise, to use only pip, you can create a virtalenv by hand:
+Otherwise, using only pip, you can create a virtalenv:
 
 ```
-$ cd signal-media-exporter
 $ python3 -m venv venv
 $ source venv/bin/activate
 (venv) $ pip install -r requirements.txt
-(venv) $ ./export.py -h
+(venv) $ python -m signal_media_exporter -h
 ```
 
 Usage / Configuration
 ---------------------
 
-You can either just use the similar command line parameters (see `export.py -h`) or create a `config.json` file by modifying the supplied `config.json.example`:
+You can either just use the similar command line parameters (see `signal-media-exporter -h`) or create a `config.json` file by modifying the supplied `config.json.example`:
 
 ```
 {

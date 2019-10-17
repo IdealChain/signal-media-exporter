@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import sys
 
 from signal_media_exporter import main

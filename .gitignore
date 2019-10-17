@@ -1,8 +1,10 @@
-.vscode/**
-.idea/**
+.vscode/
+.idea/
 __pycache__/
 venv/
+dist/
+media/
+*.egg-info/
 *.py[cod]
 *$py.class
 config.json
-signal/**

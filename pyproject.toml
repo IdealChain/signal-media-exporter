@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "signal-media-exporter"
+version = "0.1.0"
+description = "A script to export media files from Signal Desktop"
+authors = ["Daniel Achleitner <daniel.achleitner@gmail.com>"]
+license = "GPL-2.0"
+include = [
+    "config.json.example"
+]
+
+[tool.poetry.dependencies]
+python = "^3.6"
+pysqlcipher3 = "^1.0"
+coloredlogs = "^10.0"
+
+[tool.poetry.dev-dependencies]
+rope = "^0.14.0"
+
+[tool.poetry.scripts]
+signal-media-exporter = "signal_media_exporter:main"
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
