@@ -8,13 +8,13 @@ import json
 import os
 import shutil
 import re
+import sys
 
 from datetime import datetime
 from pathlib import Path
 from pysqlcipher3 import dbapi2 as sqlite
 
 logger = logging.getLogger(__name__)
-sqlcipher_settings = {}
 
 def get_key(config):
     with open(os.path.join(config['signalDir'], 'config.json'), 'r') as f:
@@ -25,12 +25,12 @@ def get_key(config):
     return key
 
 def get_messages(config, key):
+    logger.info('Connecting to sql/db.sqlite, reading messages...')
     conn = sqlite.connect(os.path.join(config['signalDir'], 'sql/db.sqlite'))
-    logger.info('Connected to sql/db.sqlite, reading messages...')
     try:
         c = conn.cursor()
         c.execute(f"PRAGMA key=\"x'{key}'\"")
-        for setting, value in sqlcipher_settings.items():
+        for setting, value in config.get('sqlcipher', {}).items():
             c.execute(f"PRAGMA {setting}={value}")
 
         c.execute("select json from items where id=?", ('number_id',))
@@ -55,6 +55,11 @@ def get_messages(config, key):
                 msg['source'] = own_number
 
             yield (row[0], msg)
+
+    except sqlite.DatabaseError as err:
+        logger.fatal(
+            'DatabaseError "%s" - please check the database and the sqlcipher parameters!',
+            ' | '.join(err.args))
 
     finally:
         conn.close()
@@ -151,6 +156,9 @@ def main():
         'config': './config.json',
         'outputDir': './media',
         'signalDir': os.path.join(Path.home(), '.config/Signal'),
+        'sqlcipher': {
+            'cipher_compatibility': 4
+        }
     }
 
     parser = argparse.ArgumentParser(description='Media file exporter for Signal Desktop.')
@@ -194,6 +202,10 @@ def main():
             stats[key] = stats.setdefault(key, 0) + value
         if i > 0 and not i % 50:
             logger.info('%04d/%04d messages | %.1f %% processed', i, len(msgs), i/len(msgs)*100)
+
+    if not stats:
+        logger.error('No media messages found.')
+        sys.exit(-1)
 
     logger.info(
         'Done. %d messages, %d media attachments [%.1f MiB], %d attachments saved [%.1f MiB].',
