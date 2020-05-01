@@ -46,6 +46,7 @@ def get_messages(config, key):
             from messages
             where { ' and '.join(cond) }
             order by sent_at asc
+            {f'limit {config["maxMessages"]}' if config["maxMessages"] > 0 else ''}
             """)
 
         for row in c:
@@ -154,6 +155,7 @@ def main():
     coloredlogs.install()
     config = {
         'config': './config.json',
+        'maxMessages': 0,
         'outputDir': './media',
         'signalDir': os.path.join(Path.home(), '.config/Signal'),
         'sqlcipher': {
@@ -170,6 +172,8 @@ def main():
                         help=f"Signal Desktop profile directory (default: {config['signalDir']})")
     parser.add_argument('-e', '--include-expiring-messages', action='store_const', const=True,
                         help="include expiring messages (default: no)")
+    parser.add_argument('--max-messages', metavar='N', nargs='?', type=int,
+                        help=f"Export media for at most N messages then stop (default: 0 = no limit)")
     args = parser.parse_args()
 
     # command line args override the settings from the config file, which override the default settings
@@ -180,7 +184,7 @@ def main():
         if args.config: raise
 
     for arg, value in vars(args).items():
-        if not value: continue
+        if value is None: continue
 
         arg_camelcase = ''.join(w.lower() if i == 0 else w.title() for i,w in enumerate(arg.split('_')))
         config[arg_camelcase] = value
@@ -189,6 +193,11 @@ def main():
     sanitize = lambda no: re.sub('[^+\d]', '', no)
     try: config['map'] = { sanitize(number): name for number, name in config['map'].items() }
     except KeyError: pass
+
+    # validate maxMessages
+    if config['maxMessages'] < 0:
+        logger.error(f'Invalid max number of messages {config["maxMessages"]} (must be >= 0).')
+        sys.exit(-1)
 
     # read the encrypted DB and run the export
     key = get_key(config)
