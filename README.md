@@ -50,7 +50,7 @@ And to install for use from outside the project's directory:
 ```
 $ poetry build
 $ python3 -m pip install dist/*.tar.gz
-$ signal_media_exporter -h
+$ signal-media-exporter -h
 ```
 
 Usage / Configuration
