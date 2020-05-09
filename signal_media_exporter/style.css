@@ -1,0 +1,44 @@
+.author {
+    font-size: small;
+    font-weight: bold;
+}
+
+.message {
+    clear: both;
+    width: 60%;
+    margin: 0.3em;
+    border: 1px solid grey;
+    padding: 0.3em;
+}
+
+.message .footer {
+    color: grey;
+    font-size: small;
+}
+
+.message .reactions {
+    font-size: small;
+}
+
+.message.incoming .reactions {
+    float: right;
+}
+
+.message.outgoing {
+    float: right;
+}
+
+.message.outgoing .footer {
+    text-align: right;
+}
+
+.quote {
+    margin: 0.3em;
+    border: 1px solid grey;
+    padding: 0.3em;
+}
+
+.reactions {
+    color: grey;
+    font-weight: bold;
+}
