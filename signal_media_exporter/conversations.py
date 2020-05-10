@@ -62,11 +62,8 @@ def add_attachments(doc, msg, exporter):
     for idx, att in enumerate(msg['attachments']):
         att_path = exporter.export(att, sender_number, sent_at, msg, idx)
         screenshot_path = None
-        if 'screenshot' in att:
-            screenshot_path = exporter.export(att['screenshot'], sender_number, sent_at, msg, idx,
-                                              purpose_dir='screenshots')
         thumbnail_path = None
-        if 'thumbnail' in att:
+        if att.get('thumbnail'):
             thumbnail_path = exporter.export(att['thumbnail'], sender_number, sent_at, msg, idx,
                                              purpose_dir='thumbnails')
 
@@ -87,7 +84,12 @@ def add_attachments(doc, msg, exporter):
                 doc.stag('video', 'controls', preload='none', height=150, width=150,
                          poster=thumbnail_path, src=att_path)
             else:
-                doc.stag('video', 'controls', preload='none', poster=screenshot_path, src=att_path)
+                if att.get('screenshot'):  # a video may not have a screenshot
+                    screenshot_path = exporter.export(att['screenshot'], sender_number, sent_at, msg, idx,
+                                                      purpose_dir='screenshots')
+                    doc.stag('video', 'controls', preload='none', poster=screenshot_path, src=att_path)
+                else:
+                    doc.stag('video', 'controls', preload='none', src=att_path)
 
 
 def add_contacts(doc, contacts):
@@ -136,7 +138,7 @@ def add_message(doc, msg, config, contacts_by_number, attachment_exporter):
         if msg.get('body') is not None:
             add_message_text(doc, msg['body'])
         add_message_footer(doc, msg)
-        if 'reactions' in msg:
+        if msg.get('reactions'):
             add_reactions(doc, msg['reactions'])
 
 

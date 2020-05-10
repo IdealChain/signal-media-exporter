@@ -42,6 +42,7 @@ def attachment_extension(att):
     if ext:
         return ext
 
+    # make_fs_name for a JPEG attachment with contentType: 'image/*'
     return make_fs_name('.' + att['contentType'].lower().split('/')[1])
 
 
