@@ -1,5 +1,14 @@
+header {
+    text-align: center;
+    font-weight: bold;
+}
+
 .author {
     font-size: small;
+    font-weight: bold;
+}
+
+.contact-name {
     font-weight: bold;
 }
 
@@ -11,13 +20,19 @@
     padding: 0.3em;
 }
 
-.message .footer {
+.message .error {
+    font-style: italic;
+}
+
+.message .metadata {
     color: grey;
     font-size: small;
 }
 
 .message .reactions {
+    color: grey;
     font-size: small;
+    font-weight: bold;
 }
 
 .message.incoming .reactions {
@@ -28,7 +43,7 @@
     float: right;
 }
 
-.message.outgoing .footer {
+.message.outgoing .metadata {
     text-align: right;
 }
 
@@ -38,7 +53,8 @@
     padding: 0.3em;
 }
 
-.reactions {
+.notification {
+    clear: both;
     color: grey;
-    font-weight: bold;
+    text-align: center;
 }

@@ -33,17 +33,20 @@ def make_fs_name(name):
 
 def attachment_extension(att):
     """Return the given attachment's extension (with leading dot)"""
-    if att.get('fileName', None):
+    if att.get('fileName'):
         _, ext = os.path.splitext(att['fileName'])
         if ext:
             return ext
 
-    ext = mimetypes.guess_extension(att['contentType'], strict=False)
-    if ext:
-        return ext
+    if att.get('contentType'):  # avatars may not have a contentType
+        ext = mimetypes.guess_extension(att['contentType'], strict=False)
+        if ext:
+            return ext
 
-    # make_fs_name for a JPEG attachment with contentType: 'image/*'
-    return make_fs_name('.' + att['contentType'].lower().split('/')[1])
+        # make_fs_name for a JPEG attachment with contentType: 'image/*'
+        return make_fs_name('.' + att['contentType'].lower().split('/')[1])
+
+    return ''
 
 
 def hash_file_quick(path):
@@ -76,7 +79,7 @@ class AttachmentExporter:
         self.contacts_by_number = contacts_by_number
 
     def export(self, att, sender_number, sent_at, msg, idx, purpose_dir='.'):
-        """Export a single attachment"""
+        """Export a single attachment and return its relative destination path"""
 
         sender = self.contacts_by_number[sender_number]['fsName']
 

@@ -17,6 +17,22 @@ logger = logging.getLogger(__name__)
 url_re = re.compile(r'(?i)(?<!\w)((?:file|ftp|https?)://\S*[\w#$%&*+/=@\\^_`|~-])')
 
 
+def has_non_technical_content(msg):
+    for field in ['attachments', 'body', 'contact', 'quote', 'reactions', 'sticker']:
+        if msg.get(field):
+            return True
+    return False
+
+
+def add_header(doc, conversation):
+    doc, tag, text = doc.tagtext()
+    with tag('header'):
+        # TODO add avatar
+        text(conversation['displayName'])
+        if conversation.get('e164'):
+            text(' · ' + conversation['e164'])
+
+
 def add_author(doc, number, contacts_by_number):
     doc.line('div', contacts_by_number[number]['displayName'], klass='author')
 
@@ -101,9 +117,16 @@ def add_contacts(doc, contacts):
             text(json.dumps(contacts, indent=2))
 
 
-def add_message_footer(doc, msg):
+def add_errors(doc, errors):
     doc, tag, text = doc.tagtext()
-    with tag('div', klass='footer'):
+    for error in errors:
+        with tag('div', klass='error'):
+            text(error['message'])
+
+
+def add_message_metadata(doc, msg):
+    doc, tag, text = doc.tagtext()
+    with tag('div', klass='metadata'):
         with tag('time'):
             text(datetime.fromtimestamp(msg['sent_at'] // 1000).isoformat(' '))  # local date/time from epoch ms
 
@@ -137,9 +160,72 @@ def add_message(doc, msg, config, contacts_by_number, attachment_exporter):
             add_contacts(doc, msg['contact'])
         if msg.get('body') is not None:
             add_message_text(doc, msg['body'])
-        add_message_footer(doc, msg)
+        if msg.get('errors') and config['includeTechnicalMessages']:
+            add_errors(doc, msg['errors'])
+        add_message_metadata(doc, msg)
         if msg.get('reactions'):
             add_reactions(doc, msg['reactions'])
+
+
+def add_contact_name(doc, number, contacts_by_number):
+    doc.line('span', contacts_by_number[number]['displayName'], klass='contact-name')
+
+
+def add_notifications(doc, msg, contacts_by_number):
+    doc, tag, text = doc.tagtext()
+
+    if has_non_technical_content(msg):
+        logger.error(f'Ignoring user content in technical message {msg["id"]}')
+
+    if msg.get('group_update'):
+        gu = msg['group_update']
+        if gu.get('joined'):
+            with tag('div', klass='notification'):
+                add_contact_name(doc, gu['joined'][0], contacts_by_number)
+                for number in gu['joined'][1:]:
+                    text(', ')
+                    add_contact_name(doc, number, contacts_by_number)
+                text(' joined the group')
+        if gu.get('left'):
+            with tag('div', klass='notification'):
+                add_contact_name(doc, gu['left'], contacts_by_number)
+                text(' left the group')
+        if gu.get('name'):
+            with tag('div', klass='notification'):
+                text(f'The title is now "{gu["name"]}"')
+        if not (gu.get('joined') or gu.get('left') or gu.get('name')):
+            with tag('div', klass='notification'):
+                text('The group was updated')
+
+    if msg.get('type') == 'keychange':
+        with tag('div', klass='notification'):
+            text('The safety number with ')
+            add_contact_name(doc, msg['key_changed'], contacts_by_number)
+            text(' has changed')
+
+    elif msg.get('type') == 'verified-change':
+        with tag('div', klass='notification'):
+            text('Your marked the safety number with ')
+            add_contact_name(doc, msg['verifiedChanged'], contacts_by_number)
+            text(f' as {"" if msg["verified"] else "not "}verified')
+            if not msg['local']:
+                text(' from another device')
+
+    elif msg.get('type') not in ['incoming', 'outgoing']:
+        with tag('div', klass='notification'):
+            text(msg.get('type', 'Untyped message'))
+
+
+def add_main(doc, msgs, config, contacts_by_number, attachment_exporter):
+    doc, tag, text = doc.tagtext()
+    with tag('main'):
+        for i, msg in enumerate(msgs):
+            if msg.get('type') in ['incoming', 'outgoing'] and not msg.get('group_update'):
+                add_message(doc, msg, config, contacts_by_number, attachment_exporter)
+            elif config['includeTechnicalMessages']:
+                add_notifications(doc, msg, contacts_by_number)
+            if i > 0 and not i % 100:
+                logger.info('%04d/%04d messages | %.1f %% processed', i, len(msgs), i / len(msgs) * 100)
 
 
 def export_conversation(conversation, msgs, config, contacts_by_number):
@@ -166,10 +252,8 @@ def export_conversation(conversation, msgs, config, contacts_by_number):
             doc.stag('base', target='_blank')
             doc.stag('link', rel='stylesheet', href='../style.css')
         with tag('body'):
-            for i, msg in enumerate(msgs):
-                add_message(doc, msg, config, contacts_by_number, attachment_exporter)
-                if i > 0 and not i % 100:
-                    logger.info('%04d/%04d messages | %.1f %% processed', i, len(msgs), i / len(msgs) * 100)
+            add_header(doc, conversation)
+            add_main(doc, msgs, config, contacts_by_number, attachment_exporter)
 
     with open(os.path.join(conversation_dir, 'index.html'), 'w') as file:
         file.write(yattag.indent(doc.getvalue()))

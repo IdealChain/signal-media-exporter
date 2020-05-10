@@ -56,8 +56,10 @@ def get_messages(config, cursor, conversation_id=None):
     cond = []
     if conversation_id:
         cond.append(f"conversationId='{conversation_id}'")
-    if not config.get('includeExpiringMessages', False):
+    if not config['includeExpiringMessages']:
         cond.append("expires_at is null")
+    if not config['includeTechnicalMessages']:
+        cond.append("type in ('incoming', 'outgoing')")  # doesn't exclude error messages and group updates
     if config['messageId']:
         cond.append(f"id='{config['messageId']}'")
     cursor.execute(f"""
@@ -82,6 +84,8 @@ def get_messages(config, cursor, conversation_id=None):
 def get_config():
     config = {
         'config': './config.json',
+        'includeExpiringMessages': False,
+        'includeTechnicalMessages': False,
         'maxAttachments': 0,
         'maxMessages': 0,
         'messageId': '',
@@ -101,6 +105,8 @@ def get_config():
                         help=f"Signal Desktop profile directory (default: {config['signalDir']})")
     parser.add_argument('-e', '--include-expiring-messages', action='store_const', const=True,
                         help="include expiring messages (default: no)")
+    parser.add_argument('--include-technical-messages', action='store_const', const=True,
+                        help="include technical messages (default: no)")
     parser.add_argument('--max-attachments', metavar='N', type=int,
                         help=f"export at most N attachments then export messages without them (default: 0 = no limit)")
     parser.add_argument('--max-messages', metavar='N', type=int,
