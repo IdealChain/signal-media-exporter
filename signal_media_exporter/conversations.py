@@ -27,7 +27,7 @@ def add_message_line(doc, line):
     parts = url_re.split(line)
     for part in parts:
         if url_re.match(part):
-            with tag('a', href=part):
+            with tag('a', href=part, rel='external noopener noreferrer'):
                 text(part)
         else:
             text(part)
@@ -79,7 +79,7 @@ def add_attachments(doc, msg, exporter):
             doc.stag('audio', 'controls', preload='metadata', src=att_path)
 
         elif att['contentType'].startswith('image/'):
-            with tag('a', href=att_path):
+            with tag('a', href=att_path, rel='noopener noreferrer'):
                 doc.stag('img', src=thumbnail_path if thumbnail_path else att_path)
 
         elif att['contentType'].startswith('video/'):
@@ -125,7 +125,7 @@ def add_message(doc, msg, config, contacts_by_number, attachment_exporter):
     # TODO export stickers
     doc, tag, text = doc.tagtext()
     with tag('div', klass=f'message {msg["type"]}'):
-        if msg['type'][0] == 'i':  # incoming
+        if msg['type'] == 'incoming':
             add_author(doc, msg['source'], contacts_by_number)
         if msg.get('quote') is not None:
             add_quote(doc, msg['quote'], contacts_by_number)
@@ -161,6 +161,7 @@ def export_conversation(conversation, msgs, config, contacts_by_number):
         with tag('head'):
             doc.stag('meta', charset='utf-8')
             doc.line('title', conversation['displayName'])
+            doc.stag('base', target='_blank')
             doc.stag('link', rel='stylesheet', href='../style.css')
         with tag('body'):
             for i, msg in enumerate(msgs):
