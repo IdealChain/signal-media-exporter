@@ -58,22 +58,27 @@ def get_messages(config, cursor, conversation_id=None):
     own_number, device_id = number_id['value'].split('.')
     # logger.info('Own number: %s, device ID: %s', own_number, device_id)
 
-    cond = []
+    cond, params = [], []
     if conversation_id:
-        cond.append(f"conversationId='{conversation_id}'")
+        cond.append("conversationId=?")
+        params.append(conversation_id)
     if not config['includeExpiringMessages']:
         cond.append("expires_at is null")
     if not config['includeTechnicalMessages']:
         cond.append("type in ('incoming', 'outgoing')")  # doesn't exclude error messages and group updates
     if config['messageId']:
-        cond.append(f"id='{config['messageId']}'")
+        cond.append("id=?")
+        params.append(config['messageId'])
+    if config['maxMessages'] > 0:
+        params.append(config['maxMessages'])
+
     cursor.execute(f"""
         select json
         from messages
         where { ' and '.join(cond) }
         order by sent_at asc
-        {f'limit {config["maxMessages"]}' if config["maxMessages"] > 0 else ''}
-        """)
+        {'limit ?' if config["maxMessages"] > 0 else ''}
+        """, params)
 
     for row in cursor:
         msg = json.loads(row[0])
