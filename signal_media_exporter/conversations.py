@@ -17,13 +17,6 @@ logger = logging.getLogger(__name__)
 url_re = re.compile(r'(?i)(?<!\w)((?:file|ftp|https?)://\S*[\w#$%&*+/=@\\^_`|~-])')
 
 
-def has_non_technical_content(msg):
-    for field in ['attachments', 'body', 'contact', 'quote', 'reactions', 'sticker']:
-        if msg.get(field):
-            return True
-    return False
-
-
 def add_header(doc, conversation):
     doc, tag, text = doc.tagtext()
     with tag('header'):
@@ -77,7 +70,6 @@ def add_attachments(doc, msg, exporter):
 
     for idx, att in enumerate(msg['attachments']):
         att_path = exporter.export(att, sender_number, sent_at, msg, idx)
-        screenshot_path = None
         thumbnail_path = None
         if att.get('thumbnail'):
             thumbnail_path = exporter.export(att['thumbnail'], sender_number, sent_at, msg, idx,
@@ -106,6 +98,19 @@ def add_attachments(doc, msg, exporter):
                     doc.stag('video', 'controls', preload='none', poster=screenshot_path, src=att_path)
                 else:
                     doc.stag('video', 'controls', preload='none', src=att_path)
+
+        else:
+            with tag('a', href=att_path, klass='generic-attachment'):
+                with tag('div', klass='icon-container'):
+                    with tag('div', klass='icon'):
+                        _, ext = os.path.splitext(att_path)
+                        doc.line('div', ext.lstrip('.'), klass='extension')
+                with tag('div', klass='text'):
+                    with tag('div', klass='file-name'):
+                        text(att['fileName'])
+                    with tag('div', klass='file-size'):
+                        size = os.path.getsize(os.path.join(exporter.base_dir, att_path))
+                        text(f'{size / 1024:.2f} KB')
 
 
 def add_contacts(doc, contacts):
@@ -174,8 +179,11 @@ def add_contact_name(doc, number, contacts_by_number):
 def add_notifications(doc, msg, contacts_by_number):
     doc, tag, text = doc.tagtext()
 
-    if has_non_technical_content(msg):
-        logger.error(f'Ignoring user content in technical message {msg["id"]}')
+    # Just in case
+    non_notif_fields = ['attachments', 'body', 'contact', 'errors', 'quote', 'reactions', 'sticker']
+    missed_fields = [field for field in non_notif_fields if msg.get(field)]
+    if missed_fields:
+        logger.error(f'Ignoring {", ".join(missed_fields)} in notification message {msg["id"]}')
 
     if msg.get('group_update'):
         gu = msg['group_update']
@@ -192,9 +200,10 @@ def add_notifications(doc, msg, contacts_by_number):
                 text(' left the group')
         if gu.get('name'):
             with tag('div', klass='notification'):
-                text(f'The title is now "{gu["name"]}"')
+                text(f"Group name is now '{gu['name']}'")
         if not (gu.get('joined') or gu.get('left') or gu.get('name')):
             with tag('div', klass='notification'):
+                # TODO f"{displayName} updated the group"
                 text('The group was updated')
 
     if msg.get('type') == 'keychange':
@@ -250,6 +259,7 @@ def export_conversation(conversation, msgs, config, contacts_by_number):
             doc.stag('meta', charset='utf-8')
             doc.line('title', conversation['displayName'])
             doc.stag('base', target='_blank')
+            doc.stag('link', rel='stylesheet', href='../signal-desktop.css')
             doc.stag('link', rel='stylesheet', href='../style.css')
         with tag('body'):
             add_header(doc, conversation)
