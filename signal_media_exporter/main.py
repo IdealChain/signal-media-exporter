@@ -81,16 +81,26 @@ def get_messages(config, cursor, conversation_id=None):
 
 ## Main
 
+def sys_user_config_path():
+    """Return the path in which the Signal dir is likely to be found depending on the platform"""
+    if sys.platform == 'win32':
+        return Path(os.getenv('APPDATA'))  # to be tested
+    elif os.getenv('XDG_CONFIG_HOME'):
+        return Path(os.getenv('XDG_CONFIG_HOME'))
+    else:
+        return Path.home() / '.config'
+
+
 def get_config():
     config = {
-        'config': './config.json',
+        'config': os.path.join('.', 'config.json'),  # didactic display in help
         'includeExpiringMessages': False,
         'includeTechnicalMessages': False,
         'maxAttachments': 0,
         'maxMessages': 0,
         'messageId': '',
-        'outputDir': './media',
-        'signalDir': Path.home() / '.config/Signal',
+        'outputDir': os.path.join('.', 'output'),
+        'signalDir': sys_user_config_path() / 'Signal',
         'sqlcipher': {
             'cipher_compatibility': 4
         }
