@@ -81,23 +81,21 @@ def add_attachments(doc, msg, exporter):
             continue
 
         if att['contentType'].startswith('audio/'):
-            doc.stag('audio', 'controls', preload='metadata', src=att_path)
+            # one must not self-close html tags that may have children
+            doc.line('audio', '', 'controls', preload='metadata', src=att_path)
 
         elif att['contentType'].startswith('image/'):
             with tag('a', href=att_path, rel='noopener noreferrer'):
                 doc.stag('img', src=thumbnail_path if thumbnail_path else att_path)
 
         elif att['contentType'].startswith('video/'):
-            if len(msg['attachments']) > 1:
-                doc.stag('video', 'controls', preload='none', height=150, width=150,
-                         poster=thumbnail_path, src=att_path)
-            else:
-                if att.get('screenshot'):  # a video may not have a screenshot
+            with tag('video', 'controls', preload='none', src=att_path):
+                if len(msg['attachments']) > 1:
+                    doc.attr(height=150, width=150, poster=thumbnail_path)
+                elif att.get('screenshot'):  # a video may not have a screenshot
                     screenshot_path = exporter.export(att['screenshot'], sender_number, sent_at, msg, idx,
                                                       purpose_dir='screenshots')
-                    doc.stag('video', 'controls', preload='none', poster=screenshot_path, src=att_path)
-                else:
-                    doc.stag('video', 'controls', preload='none', src=att_path)
+                    doc.attr(poster=screenshot_path)
 
         else:
             with tag('a', href=att_path, klass='generic-attachment'):
