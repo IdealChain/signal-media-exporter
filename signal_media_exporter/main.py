@@ -78,7 +78,8 @@ def get_messages(config, cursor, conversation_id=None):
     for row in cursor:
         msg = json.loads(row[0])
 
-        if 'source' not in msg and msg['type'] == 'outgoing':
+        # note: we know an instance of an expirationTimerUpdate message with no 'type' key
+        if 'source' not in msg and msg.get('type') == 'outgoing':
             msg['source'] = own_number
 
         yield msg
