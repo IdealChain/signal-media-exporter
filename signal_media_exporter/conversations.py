@@ -245,8 +245,9 @@ def add_errors(doc, errors):
 def add_message_metadata(doc, msg):
     doc, tag, text = doc.tagtext()
     with tag('div', klass='metadata'):
-        with tag('time'):
-            text(datetime.fromtimestamp(msg['sent_at'] // 1000).isoformat(' '))  # local date/time from epoch ms
+        if msg.get('sent_at') is not None:
+            with tag('time'):
+                text(datetime.fromtimestamp(msg['sent_at'] // 1000).isoformat(' '))  # local date/time from epoch ms
 
 
 def add_reactions(doc, reactions):
@@ -267,8 +268,8 @@ def add_reactions(doc, reactions):
 def add_message(doc, msg, config, contacts_by_number, attachment_exporter):
     # TODO export stickers
     doc, tag, text = doc.tagtext()
-    with tag('div', klass=f'message {msg["type"]}'):
-        if msg['type'] == 'incoming':
+    with tag('div', klass=f'message {msg.get("type")}'):
+        if msg.get('type') == 'incoming':
             add_author(doc, msg['source'], contacts_by_number)
         if msg.get('quote') is not None:
             add_quote(doc, msg['quote'], contacts_by_number)
@@ -333,6 +334,20 @@ def add_notifications(doc, msg, contacts_by_number):
             if not msg['local']:
                 text(' from another device')
 
+    elif msg.get('expirationTimerUpdate'):
+        with tag('div', klass='notification'):
+            timer = msg['expirationTimerUpdate'].get('expireTimer') or 0
+
+            if timer > 0 and msg['expirationTimerUpdate'].get('fromSync'):
+                text(f'Updated disappearing message timer to {timer} s')
+                return
+
+            add_contact_name(doc, msg['expirationTimerUpdate']['source'], contacts_by_number)
+            if timer > 0:
+                text(f' set the disappearing message timer to {timer} s')
+            else:
+                text(' disabled disappearing messages')
+
     elif msg.get('type') not in ['incoming', 'outgoing']:
         with tag('div', klass='notification'):
             text(msg.get('type', 'Untyped message'))
@@ -342,7 +357,7 @@ def add_main(doc, msgs, config, contacts_by_number, attachment_exporter, convers
     doc, tag, text = doc.tagtext()
     with tag('main'):
         for i, msg in enumerate(msgs):
-            if msg.get('type') in ['incoming', 'outgoing'] and not msg.get('group_update'):
+            if msg.get('type') in ['incoming', 'outgoing'] and not msg.get('group_update') and not msg.get('expirationTimerUpdate'):
                 add_message(doc, msg, config, contacts_by_number, attachment_exporter)
             elif config['includeTechnicalMessages']:
                 add_notifications(doc, msg, contacts_by_number)
@@ -384,5 +399,6 @@ def export_conversation(conversation, msgs, config, contacts_by_number, attachme
             add_header(doc, conversation)
             add_main(doc, msgs, config, contacts_by_number, attachment_exporter, conversation['displayName'])
 
+    logger.info('Writing out %s.html ...', conversation['fsName'])
     with open(html_file, 'w') as file:
         file.write(yattag.indent(doc.getvalue()))
