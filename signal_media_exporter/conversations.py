@@ -1,15 +1,130 @@
+import glob
 import json
 import logging
 import os
 import re
+import shutil
+import sys
 import yattag
 
 from datetime import datetime
+from html.parser import HTMLParser
 from signal_media_exporter.attachments import AttachmentExporter, stats
 
 
 logger = logging.getLogger(__name__)
 
+
+## Previously exported conversations
+
+def get_previous_conversation_id(html_path):
+    class Found(Exception):
+        pass
+
+    class MyHTMLParser(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            if tag == 'html':
+                for (name, value) in attrs:
+                    if name == 'data-conversation-id':
+                        raise Found(value)
+
+    with open(html_path, 'r') as f:
+        try:
+            MyHTMLParser().feed(f.read())
+        except Found as e:
+            return e.args[0]
+        else:
+            return None
+
+
+def get_previous_conversations_by_id(config):
+    if config['conversationDirs']:
+        html_files = glob.glob(os.path.join(config['outputDir'], '*', 'index.html'))
+        conversation_id_files = glob.glob(os.path.join(config['outputDir'], '*', '*', 'conversationId.txt'))
+    else:
+        html_files = glob.glob(os.path.join(config['outputDir'], '*.html'))
+        conversation_id_files = glob.glob(os.path.join(config['outputDir'], '*', 'conversationId.txt'))
+
+    # Associate to each found conversationId:
+    # - the one filesystem name (crash if we find several)
+    # - all paths to move if the conversation was renamed
+    res = {}
+
+    # Previously exported conversations
+    for file in html_files:
+        conversation_id = get_previous_conversation_id(file)
+        if conversation_id:
+            if config['conversationDirs']:
+                path = os.path.dirname(file)
+                name = os.path.basename(path)
+            else:
+                path = file
+                name, ext = os.path.splitext(os.path.basename(path))
+
+            if conversation_id in res:
+                logger.error("Found two previously exported conversations with the same ID: %s and %s",
+                             res[conversation_id]['fsName'], name)
+                sys.exit(1)
+
+            res[conversation_id] = {'fsName': name, 'conversationPath': path}
+
+    # Senders of previously exported attachments
+    for file in conversation_id_files:
+        with open(file, 'r') as f:
+            conversation_id = f.read()
+        path = os.path.dirname(file)
+        name = os.path.basename(path)
+
+        if conversation_id in res and name != res[conversation_id]['fsName']:
+            logger.error("Found two previously exported conversations or senders with the same ID: %s and %s",
+                         res[conversation_id]['fsName'], name)
+            sys.exit(1)
+
+        res.setdefault(conversation_id, {'fsName': name}).setdefault('senderPaths', []).append(path)
+
+    return res
+
+
+def replace_rightmost(old, new, string):
+    idx = string.rfind(old)
+    if idx > -1:
+        return string[:idx] + new + string[idx+len(old):]
+    else:
+        raise Exception('Substring not found')
+
+
+def rename_previous_conversations(new_conversations, config):
+    # TODO check for previous conversations with same name as a new one but unknown ID
+    old_conversations = get_previous_conversations_by_id(config)
+
+    # first move sender dirs, if any (may be contained in convo dirs renamed below)
+    for new_conv in new_conversations:
+        if new_conv['id'] in old_conversations:
+            old_conv = old_conversations[new_conv['id']]
+            if new_conv['fsName'] != old_conv['fsName'] and 'senderPaths' in old_conv:
+                logger.info('Renaming sender "%s" to "%s"', old_conv['fsName'], new_conv['fsName'])
+                for old_path in old_conv['senderPaths']:
+                    new_path = replace_rightmost(old_conv['fsName'], new_conv['fsName'], old_path)
+                    if os.path.lexists(new_path):
+                        logger.error('Cannot rename "%s" to "%s": destination already exists', old_path, new_path)
+                        sys.exit(1)
+                    shutil.move(old_path, new_path)
+
+    # then move convo dirs or HTML files, if any (may contain sender dirs renamed above)
+    for new_conv in new_conversations:
+        if new_conv['id'] in old_conversations:
+            old_conv = old_conversations[new_conv['id']]
+            if new_conv['fsName'] != old_conv['fsName'] and 'conversationPath' in old_conv:
+                logger.info('Renaming conversation "%s" to "%s"', old_conv['fsName'], new_conv['fsName'])
+                old_path = old_conv['conversationPath']
+                new_path = replace_rightmost(old_conv['fsName'], new_conv['fsName'], old_path)
+                if os.path.lexists(new_path):
+                    logger.error('Cannot rename "%s" to "%s": destination already exists', old_path, new_path)
+                    sys.exit(1)
+                shutil.move(old_path, new_path)
+
+
+## HTML
 
 # Fuzzy URL regex. Recognized by a known schema, delimited by whitespace, only allowing as last character one that
 # isn't likely to be punctuation
@@ -223,7 +338,7 @@ def add_notifications(doc, msg, contacts_by_number):
             text(msg.get('type', 'Untyped message'))
 
 
-def add_main(doc, msgs, config, contacts_by_number, attachment_exporter):
+def add_main(doc, msgs, config, contacts_by_number, attachment_exporter, conversation_name):
     doc, tag, text = doc.tagtext()
     with tag('main'):
         for i, msg in enumerate(msgs):
@@ -232,10 +347,11 @@ def add_main(doc, msgs, config, contacts_by_number, attachment_exporter):
             elif config['includeTechnicalMessages']:
                 add_notifications(doc, msg, contacts_by_number)
             if i > 0 and not i % 100:
-                logger.info('%04d/%04d messages | %.1f %% processed', i, len(msgs), i / len(msgs) * 100)
+                logger.info('%04d/%04d messages | %.1f %% of %s processed',
+                            i, len(msgs), i / len(msgs) * 100, conversation_name)
 
 
-def export_conversation(conversation, msgs, config, contacts_by_number):
+def export_conversation(conversation, msgs, config, contacts_by_number, attachment_exporter=None):
     if len(msgs) <= 0:
         logger.info('Skipping %s (no messages)', conversation['displayName'])
         return
@@ -244,24 +360,29 @@ def export_conversation(conversation, msgs, config, contacts_by_number):
 
     stats['messages'] += len(msgs)
 
-    conversation_dir = os.path.join(config['outputDir'], conversation['fsName'])
-    os.makedirs(conversation_dir, exist_ok=True)
-
-    attachment_exporter = AttachmentExporter(conversation_dir, config, contacts_by_number)
+    if config['conversationDirs']:
+        base_dir = os.path.join(config['outputDir'], conversation['fsName'])
+        os.makedirs(base_dir, exist_ok=True)
+        attachment_exporter = AttachmentExporter(base_dir, config, contacts_by_number)
+        html_file = os.path.join(base_dir, 'index.html')
+        resources_dir = '..'
+    else:
+        html_file = os.path.join(config['outputDir'], conversation['fsName'] + '.html')
+        resources_dir = '.'
 
     # Make HTML
     doc, tag, text = yattag.Doc().tagtext()
     doc.asis('<!DOCTYPE html>')
-    with tag('html'):
+    with tag('html', ('data-conversation-id', conversation['id'])):
         with tag('head'):
             doc.stag('meta', charset='utf-8')
             doc.line('title', conversation['displayName'])
             doc.stag('base', target='_blank')
-            doc.stag('link', rel='stylesheet', href='../signal-desktop.css')
-            doc.stag('link', rel='stylesheet', href='../style.css')
+            doc.stag('link', rel='stylesheet', href=resources_dir + '/signal-desktop.css')
+            doc.stag('link', rel='stylesheet', href=resources_dir + '/style.css')
         with tag('body'):
             add_header(doc, conversation)
-            add_main(doc, msgs, config, contacts_by_number, attachment_exporter)
+            add_main(doc, msgs, config, contacts_by_number, attachment_exporter, conversation['displayName'])
 
-    with open(os.path.join(conversation_dir, 'index.html'), 'w') as file:
+    with open(html_file, 'w') as file:
         file.write(yattag.indent(doc.getvalue()))

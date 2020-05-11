@@ -11,8 +11,8 @@ import sys
 
 from pathlib import Path
 from pysqlcipher3 import dbapi2 as sqlite
-from signal_media_exporter.attachments import stats, make_fs_name
-from signal_media_exporter.conversations import export_conversation
+from signal_media_exporter.attachments import stats, make_fs_name, AttachmentExporter
+from signal_media_exporter.conversations import rename_previous_conversations, export_conversation
 
 
 logger = logging.getLogger(__name__)
@@ -42,12 +42,17 @@ def get_conversations(cursor):
     return sorted(conversations, key=(lambda conv: conv['displayName']))
 
 
-def group_contacts_by_number(conversations):
-    return {conv['e164']: conv for conv in conversations if 'e164' in conv}
+def group_contacts_by_number_or_id(conversations):
+    res = {}
+    for conv in conversations:
+        if conv.get('e164'):  # contacts only
+            res[conv['e164']] = conv
+            # index by ID too because contacts are sometimes referred to by ID (start of a general shift in Signal?)
+            res[conv['id']] = conv
+    return res
 
 
 def get_messages(config, cursor, conversation_id=None):
-    # logger.info('Reading messages...')
     cursor.execute("select json from items where id=?", ('number_id',))
     number_id = json.loads(cursor.fetchone()[0])
     own_number, device_id = number_id['value'].split('.')
@@ -94,6 +99,7 @@ def sys_user_config_path():
 def get_config():
     config = {
         'config': os.path.join('.', 'config.json'),  # didactic display in help
+        'conversationDirs': False,
         'includeExpiringMessages': False,
         'includeTechnicalMessages': False,
         'maxAttachments': 0,
@@ -106,13 +112,16 @@ def get_config():
         }
     }
 
-    parser = argparse.ArgumentParser(description='Media file exporter for Signal Desktop.')
+    parser = argparse.ArgumentParser(description='Conversation and file exporter for Signal Desktop.')
     parser.add_argument('-c', '--config', type=str,
                         help=f"path of config file to read (default: {config['config']})")
     parser.add_argument('-o', '--output-dir', type=str,
                         help=f"output directory for media files (default: {config['outputDir']})")
     parser.add_argument('-s', '--signal-dir', type=str,
                         help=f"Signal Desktop profile directory (default: {config['signalDir']})")
+    parser.add_argument('--conversation-dirs', action='store_const', const=True)
+    parser.add_argument('--no-conversation-dirs', dest='conversation_dirs', action='store_const', const=False,
+                        help="(don't) export conversation data into separate directories (default: no)")
     parser.add_argument('-e', '--include-expiring-messages', action='store_const', const=True,
                         help="include expiring messages (default: no)")
     parser.add_argument('--include-technical-messages', action='store_const', const=True,
@@ -184,12 +193,19 @@ def run_export(config):
 
         # Get conversation metadata
         conversations = get_conversations(cursor)
-        contacts_by_number = group_contacts_by_number(conversations)
+        contacts_by_number = group_contacts_by_number_or_id(conversations)
+
+        rename_previous_conversations(conversations, config)
 
         # Export messages and attachments
+        if config['conversationDirs']:
+            attachment_exporter = None  # will be defined for each conversation
+        else:
+            attachment_exporter = AttachmentExporter(config['outputDir'], config, contacts_by_number)
+
         for conversation in conversations:
             msgs = list(get_messages(config, cursor, conversation['id']))
-            export_conversation(conversation, msgs, config, contacts_by_number)
+            export_conversation(conversation, msgs, config, contacts_by_number, attachment_exporter)
 
         logger.info(
             'Done. %d messages, %d media attachments [%.1f MiB], %d attachments saved [%.1f MiB].',

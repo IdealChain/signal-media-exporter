@@ -1,5 +1,6 @@
 {
     "outputDir": "./media",
+    "conversationDirs": true,
     "includeExpiringMessages": false,
     "map": {
         "+430000000000": "Me",

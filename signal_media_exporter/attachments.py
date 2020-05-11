@@ -81,7 +81,9 @@ class AttachmentExporter:
     def export(self, att, sender_number, sent_at, msg, idx, purpose_dir='.'):
         """Export a single attachment and return its relative destination path"""
 
-        sender = self.contacts_by_number[sender_number]['fsName']
+        sender = self.contacts_by_number[sender_number]
+        sender_name = sender['fsName']
+        sender_dir = os.path.join(self.base_dir, sender_name)
 
         # Build name (might not get used)
         name = ['signal', sent_at.strftime('%Y-%m-%d-%H%M%S')]
@@ -90,12 +92,12 @@ class AttachmentExporter:
         name = f'{"-".join(name)}{attachment_extension(att)}'
 
         if att.get('pending', False) or not att.get('path'):
-            logger.warning('Skipping %s/%s (media file not downloaded)', sender, name)
+            logger.warning('Skipping %s/%s (media file not downloaded)', sender_name, name)
             return
         src = os.path.join(self.config['signalDir'], 'attachments.noindex', att['path'])
-        dst = os.path.join(self.base_dir, sender, purpose_dir, name)
+        dst = os.path.join(sender_dir, purpose_dir, name)
         if not os.path.exists(src):
-            logger.warning('Skipping %s/%s/%s (media file not found)', sender, purpose_dir, name)
+            logger.warning('Skipping %s/%s/%s (media file not found)', sender_name, purpose_dir, name)
             return
 
         stats['attachments'] += + 1
@@ -104,17 +106,23 @@ class AttachmentExporter:
         quick_hash = hash_file_quick(src)
         if quick_hash in self.hashes:
             if hash_file_sha256(src) in (hash_file_sha256(f) for f in self.hashes[quick_hash]):
-                logger.info('Skipping %s/%s/%s (already saved an identical file)', sender, purpose_dir, name)
+                logger.info('Skipping %s/%s/%s (already saved an identical file)', sender_name, purpose_dir, name)
                 # TODO return path
                 return
 
         if os.path.exists(dst):
             # TODO file exported in previous run?
-            logger.debug('Skipping %s/%s/%s (file exists)', sender, purpose_dir, name)
+            logger.debug('Skipping %s/%s/%s (file exists)', sender_name, purpose_dir, name)
             self.hashes.setdefault(quick_hash, []).append(src)
-            return os.path.join(sender, purpose_dir, name)
+            return os.path.join(sender_name, purpose_dir, name)
 
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        # Ensure we have a sender dir with a conversationId file
+        if not os.path.exists(os.path.join(sender_dir, 'conversationId.txt')):
+            os.makedirs(sender_dir, exist_ok=True)
+            with open(os.path.join(sender_dir, 'conversationId.txt'), 'w') as f:
+                f.write(sender['id'])
+
+        os.makedirs(os.path.dirname(dst), exist_ok=True)  # may be a subdir of the sender dir
         shutil.copy(src, dst)
         os.utime(dst, times=(sent_at.timestamp(), sent_at.timestamp()))
         size = os.path.getsize(dst)
@@ -124,4 +132,4 @@ class AttachmentExporter:
         stats['saved_attachments_size'] += size
         self.hashes.setdefault(quick_hash, []).append(src)
 
-        return os.path.join(sender, purpose_dir, name)
+        return os.path.join(sender_name, purpose_dir, name)
