@@ -1,127 +1,57 @@
-import glob
 import json
 import logging
 import os
 import re
-import shutil
-import sys
 import yattag
 
 from datetime import datetime
-from html.parser import HTMLParser
 from signal_media_exporter.attachments import AttachmentExporter, stats
 
 
 logger = logging.getLogger(__name__)
 
 
-## Previously exported conversations
+## CSS
 
-def get_previous_conversation_id(html_path):
-    class Found(Exception):
-        pass
-
-    class MyHTMLParser(HTMLParser):
-        def handle_starttag(self, tag, attrs):
-            if tag == 'html':
-                for (name, value) in attrs:
-                    if name == 'data-conversation-id':
-                        raise Found(value)
-
-    with open(html_path, 'r') as f:
-        try:
-            MyHTMLParser().feed(f.read())
-        except Found as e:
-            return e.args[0]
-        else:
-            return None
+css_colors = {
+    # signal name: (in msg bg + out quote border-left + avatar, quote bg)
+    'red': ('cc163d', 'eda6ae'),
+    'deep_orange': ('c73800', 'eba78e'),
+    'brown': ('746c53', 'c4b997'),
+    'pink': ('a23474', 'dcb2ca'),
+    'purple': ('862caf', 'cdaddc'),
+    'indigo': ('5951c8', 'c2c1e7'),
+    'blue': ('336ba3', 'adc8e1'),
+    'teal': ('067589', 'a5cad5'),
+    'green': ('3b7845', '8fcc9a'),
+    'light_green': ('1c8260', '9bcfbd'),
+    'blue_grey': ('895d66', 'cfb5bb')
+}
 
 
-def get_previous_conversations_by_id(config):
-    if config['conversationDirs']:
-        html_files = glob.glob(os.path.join(config['outputDir'], '*', 'index.html'))
-        conversation_id_files = glob.glob(os.path.join(config['outputDir'], '*', '*', 'conversationId.txt'))
-    else:
-        html_files = glob.glob(os.path.join(config['outputDir'], '*.html'))
-        conversation_id_files = glob.glob(os.path.join(config['outputDir'], '*', 'conversationId.txt'))
-
-    # Associate to each found conversationId:
-    # - the one filesystem name (crash if we find several)
-    # - all paths to move if the conversation was renamed
-    res = {}
-
-    # Previously exported conversations
-    for file in html_files:
-        conversation_id = get_previous_conversation_id(file)
-        if conversation_id:
-            if config['conversationDirs']:
-                path = os.path.dirname(file)
-                name = os.path.basename(path)
-            else:
-                path = file
-                name, ext = os.path.splitext(os.path.basename(path))
-
-            if conversation_id in res:
-                logger.error("Found two previously exported conversations with the same ID: %s and %s",
-                             res[conversation_id]['fsName'], name)
-                sys.exit(1)
-
-            res[conversation_id] = {'fsName': name, 'conversationPath': path}
-
-    # Senders of previously exported attachments
-    for file in conversation_id_files:
-        with open(file, 'r') as f:
-            conversation_id = f.read()
-        path = os.path.dirname(file)
-        name = os.path.basename(path)
-
-        if conversation_id in res and name != res[conversation_id]['fsName']:
-            logger.error("Found two previously exported conversations or senders with the same ID: %s and %s",
-                         res[conversation_id]['fsName'], name)
-            sys.exit(1)
-
-        res.setdefault(conversation_id, {'fsName': name}).setdefault('senderPaths', []).append(path)
-
-    return res
+def contact_class(number):
+    return 'p' + number[1:]
 
 
-def replace_rightmost(old, new, string):
-    idx = string.rfind(old)
-    if idx > -1:
-        return string[:idx] + new + string[idx+len(old):]
-    else:
-        raise Exception('Substring not found')
+def write_contacts_css(conversations, directory):
+    contact_classes_by_color = {}
+    for conv in conversations:
+        if conv.get('color') and conv.get('e164'):
+            contact_classes_by_color.setdefault(conv['color'], []).append(contact_class(conv['e164']))
 
+    logger.info("Writing contact-colors.css")
+    with open(os.path.join(directory, 'contact-colors.css'), 'w') as f:
+        for signal_color in css_colors:
+            if signal_color in contact_classes_by_color:
+                f.write(',\n'.join([f'.message.incoming.{cl} .container' for cl in contact_classes_by_color[signal_color]]))
+                f.write(f' {{\n  background-color: #{css_colors[signal_color][0]};\n}}\n')
 
-def rename_previous_conversations(new_conversations, config):
-    # TODO check for previous conversations with same name as a new one but unknown ID
-    old_conversations = get_previous_conversations_by_id(config)
+                f.write(',\n'.join([f'.incoming.{cl} .quote' for cl in contact_classes_by_color[signal_color]]))
+                f.write(f' {{\n  background-color: #{css_colors[signal_color][1]};\n}}\n')
 
-    # first move sender dirs, if any (may be contained in convo dirs renamed below)
-    for new_conv in new_conversations:
-        if new_conv['id'] in old_conversations:
-            old_conv = old_conversations[new_conv['id']]
-            if new_conv['fsName'] != old_conv['fsName'] and 'senderPaths' in old_conv:
-                logger.info('Renaming sender "%s" to "%s"', old_conv['fsName'], new_conv['fsName'])
-                for old_path in old_conv['senderPaths']:
-                    new_path = replace_rightmost(old_conv['fsName'], new_conv['fsName'], old_path)
-                    if os.path.lexists(new_path):
-                        logger.error('Cannot rename "%s" to "%s": destination already exists', old_path, new_path)
-                        sys.exit(1)
-                    shutil.move(old_path, new_path)
-
-    # then move convo dirs or HTML files, if any (may contain sender dirs renamed above)
-    for new_conv in new_conversations:
-        if new_conv['id'] in old_conversations:
-            old_conv = old_conversations[new_conv['id']]
-            if new_conv['fsName'] != old_conv['fsName'] and 'conversationPath' in old_conv:
-                logger.info('Renaming conversation "%s" to "%s"', old_conv['fsName'], new_conv['fsName'])
-                old_path = old_conv['conversationPath']
-                new_path = replace_rightmost(old_conv['fsName'], new_conv['fsName'], old_path)
-                if os.path.lexists(new_path):
-                    logger.error('Cannot rename "%s" to "%s": destination already exists', old_path, new_path)
-                    sys.exit(1)
-                shutil.move(old_path, new_path)
+                f.write(',\n'.join([f'.outgoing .quote.{cl}' for cl in contact_classes_by_color[signal_color]]))
+                f.write(f' {{\n  border-left-color: #{css_colors[signal_color][0]};\n')
+                f.write(f'  background-color: #{css_colors[signal_color][1]};\n}}\n')
 
 
 ## HTML
@@ -135,10 +65,13 @@ url_re = re.compile(r'(?i)(?<!\w)((?:file|ftp|https?)://\S*[\w#$%&*+/=@\\^_`|~-]
 def add_header(doc, conversation):
     doc, tag, text = doc.tagtext()
     with tag('header'):
-        # TODO add avatar
-        text(conversation['displayName'])
-        if conversation.get('e164'):
-            text(' · ' + conversation['e164'])
+        with tag('div', klass='title-container'):
+            with tag('div', klass='title-flex'):
+                # TODO add avatar
+                with tag('div', klass='title'):
+                    text(conversation['displayName'])
+                    if conversation.get('e164'):
+                        text(' · ' + conversation['e164'])
 
 
 def add_author(doc, number, contacts_by_number):
@@ -157,10 +90,10 @@ def add_message_line(doc, line):
             text(part)
 
 
-def add_message_text(doc, txt):
+def add_message_text(doc, txt, klass):
     doc, tag, text = doc.tagtext()
     # replace newlines with <br/>
-    with tag('div', klass='text'):
+    with tag('div', klass=klass):
         lines = txt.split('\n')
         add_message_line(doc, lines[0])
         for line in lines[1:]:
@@ -169,12 +102,21 @@ def add_message_text(doc, txt):
 
 
 def add_quote(doc, quote, contacts_by_number):
-    # TODO display quote attachments
     doc, tag, text = doc.tagtext()
-    with tag('div', klass='quote'):
-        add_author(doc, quote['author'], contacts_by_number)
-        if quote.get('text') is not None:
-            add_message_text(doc, quote['text'])
+    with tag('div', klass='quote-container'):
+        with tag('div', klass=f'quote {contact_class(quote["author"])}'):
+            with tag('div', klass='primary'):
+                add_author(doc, quote['author'], contacts_by_number)
+                if quote.get('text') is not None:
+                    add_message_text(doc, quote['text'], 'quote-text')
+
+            # TODO display quote attachments
+            # for att in quote.get('attachments', []):
+            #     if att.get('thumbnail'):
+            #         path = attachment_exporter.export(att['thumbnail'], quote['author'], sent_at, msg, idx,
+            #                                           purpose_dir='thumbnails')
+            #         with tag('div', klass='icon-container'):
+            #             doc.stag('img', height=54, width=54, src=path)
 
 
 def add_attachments(doc, msg, exporter):
@@ -238,7 +180,7 @@ def add_contacts(doc, contacts):
 def add_errors(doc, errors):
     doc, tag, text = doc.tagtext()
     for error in errors:
-        with tag('div', klass='error'):
+        with tag('div', klass='message-text error'):
             text(error['message'])
 
 
@@ -250,7 +192,7 @@ def add_message_metadata(doc, msg):
                 text(datetime.fromtimestamp(msg['sent_at'] // 1000).isoformat(' '))  # local date/time from epoch ms
 
 
-def add_reactions(doc, reactions):
+def add_reactions(doc, reactions, contacts_by_number):
     doc, tag, text = doc.tagtext()
 
     # group by emoji
@@ -261,33 +203,43 @@ def add_reactions(doc, reactions):
     # add to html
     with tag('div', klass='reactions'):
         for emoji, reactors in aggregated.items():
-            with tag('span', title=', '.join(reactors), klass='reaction'):
-                text(f'{emoji} {len(reactors)}' if len(reactors) > 1 else emoji)
+            reactors_names = [contacts_by_number[r]['displayName'] for r in reactors]
+            with tag('span', title=', '.join(reactors_names), klass='reaction'):
+                text(emoji)
+                if len(reactors) > 1:
+                    doc.attr(klass='reaction with-count')
+                    with tag('span', klass='count'):
+                        text(len(reactors))
 
 
 def add_message(doc, msg, config, contacts_by_number, attachment_exporter):
     # TODO export stickers
     doc, tag, text = doc.tagtext()
-    with tag('div', klass=f'message {msg.get("type")}'):
-        if msg.get('type') == 'incoming':
-            add_author(doc, msg['source'], contacts_by_number)
-        if msg.get('quote') is not None:
-            add_quote(doc, msg['quote'], contacts_by_number)
-        if msg['attachments'] and (config['maxAttachments'] == 0 or stats['attachments'] < config['maxAttachments']):
-            add_attachments(doc, msg, attachment_exporter)
-        if msg['contact']:
-            add_contacts(doc, msg['contact'])
-        if msg.get('body') is not None:
-            add_message_text(doc, msg['body'])
-        if msg.get('errors') and config['includeTechnicalMessages']:
-            add_errors(doc, msg['errors'])
-        add_message_metadata(doc, msg)
-        if msg.get('reactions'):
-            add_reactions(doc, msg['reactions'])
+    klass = f'message {msg.get("type", "")}'
+    if msg.get('source'):
+        klass += ' ' + contact_class(msg['source'])
+    with tag('div', klass=klass):
+        with tag('div', klass='container'):
+            if msg.get('type') == 'incoming':
+                add_author(doc, msg['source'], contacts_by_number)
+            if msg.get('quote') is not None:
+                add_quote(doc, msg['quote'], contacts_by_number)
+            if msg['attachments']:
+                if config['maxAttachments'] == 0 or stats['attachments'] < config['maxAttachments']:
+                    add_attachments(doc, msg, attachment_exporter)
+            if msg['contact']:
+                add_contacts(doc, msg['contact'])
+            if msg.get('body') is not None:
+                add_message_text(doc, msg['body'], 'message-text')
+            if msg.get('errors') and config['includeTechnicalMessages']:
+                add_errors(doc, msg['errors'])
+            add_message_metadata(doc, msg)
+            if msg.get('reactions'):
+                add_reactions(doc, msg['reactions'], contacts_by_number)
 
 
 def add_contact_name(doc, number, contacts_by_number):
-    doc.line('span', contacts_by_number[number]['displayName'], klass='contact-name')
+    doc.line('span', contacts_by_number[number]['displayName'], klass='contact')
 
 
 def add_notifications(doc, msg, contacts_by_number):
@@ -299,68 +251,71 @@ def add_notifications(doc, msg, contacts_by_number):
     if missed_fields:
         logger.error(f'Ignoring {", ".join(missed_fields)} in notification message {msg["id"]}')
 
-    if msg.get('group_update'):
-        gu = msg['group_update']
-        if gu.get('joined'):
+    with tag('div', klass='inline-notification-wrapper'):
+        if msg.get('group_update'):
+            gu = msg['group_update']
             with tag('div', klass='notification'):
-                add_contact_name(doc, gu['joined'][0], contacts_by_number)
-                for number in gu['joined'][1:]:
-                    text(', ')
-                    add_contact_name(doc, number, contacts_by_number)
-                text(' joined the group')
-        if gu.get('left'):
+                if gu.get('joined'):
+                    with tag('div', klass='change'):
+                        add_contact_name(doc, gu['joined'][0], contacts_by_number)
+                        for number in gu['joined'][1:]:
+                            text(', ')
+                            add_contact_name(doc, number, contacts_by_number)
+                        text(' joined the group')
+                if gu.get('left'):
+                    with tag('div', klass='change'):
+                        add_contact_name(doc, gu['left'], contacts_by_number)
+                        text(' left the group')
+                if gu.get('name'):
+                    with tag('div', klass='change'):
+                        text(f"Group name is now '{gu['name']}'")
+                if not (gu.get('joined') or gu.get('left') or gu.get('name')):
+                    with tag('div', klass='change'):
+                        # TODO f"{displayName} updated the group"
+                        text('The group was updated')
+
+        if msg.get('type') == 'keychange':
             with tag('div', klass='notification'):
-                add_contact_name(doc, gu['left'], contacts_by_number)
-                text(' left the group')
-        if gu.get('name'):
+                text('The safety number with ')
+                add_contact_name(doc, msg['key_changed'], contacts_by_number)
+                text(' has changed')
+
+        elif msg.get('type') == 'verified-change':
             with tag('div', klass='notification'):
-                text(f"Group name is now '{gu['name']}'")
-        if not (gu.get('joined') or gu.get('left') or gu.get('name')):
+                text('Your marked the safety number with ')
+                add_contact_name(doc, msg['verifiedChanged'], contacts_by_number)
+                text(f' as {"" if msg["verified"] else "not "}verified')
+                if not msg['local']:
+                    text(' from another device')
+
+        elif msg.get('expirationTimerUpdate'):
             with tag('div', klass='notification'):
-                # TODO f"{displayName} updated the group"
-                text('The group was updated')
+                timer = msg['expirationTimerUpdate'].get('expireTimer') or 0
 
-    if msg.get('type') == 'keychange':
-        with tag('div', klass='notification'):
-            text('The safety number with ')
-            add_contact_name(doc, msg['key_changed'], contacts_by_number)
-            text(' has changed')
+                if timer > 0 and msg['expirationTimerUpdate'].get('fromSync'):
+                    text(f'Updated disappearing message timer to {timer} s')
+                    return
 
-    elif msg.get('type') == 'verified-change':
-        with tag('div', klass='notification'):
-            text('Your marked the safety number with ')
-            add_contact_name(doc, msg['verifiedChanged'], contacts_by_number)
-            text(f' as {"" if msg["verified"] else "not "}verified')
-            if not msg['local']:
-                text(' from another device')
+                add_contact_name(doc, msg['expirationTimerUpdate']['source'], contacts_by_number)
+                if timer > 0:
+                    text(f' set the disappearing message timer to {timer} s')
+                else:
+                    text(' disabled disappearing messages')
 
-    elif msg.get('expirationTimerUpdate'):
-        with tag('div', klass='notification'):
-            timer = msg['expirationTimerUpdate'].get('expireTimer') or 0
-
-            if timer > 0 and msg['expirationTimerUpdate'].get('fromSync'):
-                text(f'Updated disappearing message timer to {timer} s')
-                return
-
-            add_contact_name(doc, msg['expirationTimerUpdate']['source'], contacts_by_number)
-            if timer > 0:
-                text(f' set the disappearing message timer to {timer} s')
-            else:
-                text(' disabled disappearing messages')
-
-    elif msg.get('type') not in ['incoming', 'outgoing']:
-        with tag('div', klass='notification'):
-            text(msg.get('type', 'Untyped message'))
+        elif msg.get('type') not in ['incoming', 'outgoing']:
+            with tag('div', klass='notification'):
+                text(msg.get('type', 'Untyped message'))
 
 
 def add_main(doc, msgs, config, contacts_by_number, attachment_exporter, conversation_name):
     doc, tag, text = doc.tagtext()
     with tag('main'):
         for i, msg in enumerate(msgs):
-            if msg.get('type') in ['incoming', 'outgoing'] and not msg.get('group_update') and not msg.get('expirationTimerUpdate'):
-                add_message(doc, msg, config, contacts_by_number, attachment_exporter)
-            elif config['includeTechnicalMessages']:
-                add_notifications(doc, msg, contacts_by_number)
+            with tag('div', klass='message-container'):
+                if msg.get('type') in ['incoming', 'outgoing'] and not msg.get('group_update') and not msg.get('expirationTimerUpdate'):
+                    add_message(doc, msg, config, contacts_by_number, attachment_exporter)
+                elif config['includeTechnicalMessages']:
+                    add_notifications(doc, msg, contacts_by_number)
             if i > 0 and not i % 100:
                 logger.info('%04d/%04d messages | %.1f %% of %s processed',
                             i, len(msgs), i / len(msgs) * 100, conversation_name)
@@ -388,11 +343,12 @@ def export_conversation(conversation, msgs, config, contacts_by_number, attachme
     # Make HTML
     doc, tag, text = yattag.Doc().tagtext()
     doc.asis('<!DOCTYPE html>')
-    with tag('html', ('data-conversation-id', conversation['id'])):
+    with tag('html', ('data-conversation-id', conversation['id']), klass=conversation.get('type', '')):
         with tag('head'):
             doc.stag('meta', charset='utf-8')
             doc.line('title', conversation['displayName'])
             doc.stag('base', target='_blank')
+            doc.stag('link', rel='stylesheet', href=resources_dir + '/contact-colors.css')
             doc.stag('link', rel='stylesheet', href=resources_dir + '/signal-desktop.css')
             doc.stag('link', rel='stylesheet', href=resources_dir + '/style.css')
         with tag('body'):
@@ -401,4 +357,7 @@ def export_conversation(conversation, msgs, config, contacts_by_number, attachme
 
     logger.info('Writing out %s.html ...', conversation['fsName'])
     with open(html_file, 'w') as file:
-        file.write(yattag.indent(doc.getvalue()))
+        # note: yattag.indent breaks messages that only contain a link (2020-05-14)
+        # https://github.com/leforestier/yattag/issues/62
+        # file.write(yattag.indent(doc.getvalue()))
+        file.write(doc.getvalue())

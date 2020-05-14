@@ -12,7 +12,8 @@ import sys
 from pathlib import Path
 from pysqlcipher3 import dbapi2 as sqlite
 from signal_media_exporter.attachments import stats, make_fs_name, AttachmentExporter
-from signal_media_exporter.conversations import rename_previous_conversations, export_conversation
+from signal_media_exporter.conversations import write_contacts_css, export_conversation
+from signal_media_exporter.previous import rename_previous_conversations
 
 
 logger = logging.getLogger(__name__)
@@ -202,6 +203,8 @@ def run_export(config):
         contacts_by_number = group_contacts_by_number_or_id(conversations)
 
         rename_previous_conversations(conversations, config)
+
+        write_contacts_css(conversations, config['outputDir'])
 
         # Export messages and attachments
         if config['conversationDirs']:

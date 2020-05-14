@@ -29,6 +29,13 @@ For Arch Linux, you can install the [sqlcipher](https://www.archlinux.org/packag
 * [pysqlcipher3](https://github.com/rigglemania/pysqlcipher3) (via pip)
 * [coloredlogs](https://github.com/xolox/python-coloredlogs) (via pip)
 
+### Inter fonts (optional)
+
+Exported conversation are set to use the Inter fonts (which Signal uses) if available. You can install them using your package manager or from [the official website](https://rsms.me/inter/). Otherwise, conversations will display using what fonts are available on your system.
+
+Installation
+------------
+
 If you have poetry installed, you can run:
 
 ```
