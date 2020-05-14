@@ -1,0 +1,6 @@
+/* we use links where signal uses button elements so we undo what otherwise happens to links */
+.button-link {
+    color: inherit;
+    outline: inherit;
+    text-decoration: inherit;
+}

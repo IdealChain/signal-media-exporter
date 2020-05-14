@@ -119,11 +119,55 @@ def add_quote(doc, quote, contacts_by_number):
             #             doc.stag('img', height=54, width=54, src=path)
 
 
-def add_attachments(doc, msg, exporter):
+def one_image_display_dimensions(att):
+    """
+    Return the display width and height of the given image or video attachment,
+    assuming it is the only attachment of the message.
+    """
+    min_w, max_w, min_h, max_h = 200, 300, 50, 450
+    w, h = att['width'], att['height']
+    # make bigger if needed, preserve proportions
+    if w < min_w:
+        h *= min_w / w
+        w = min_w
+    if h < min_h:
+        w *= min_h / h
+        h = min_h
+    # make smaller if needed, preserve proportions if possible but break them if necessary not to become too small
+    if w > max_w:
+        h = max(min_h, h * max_w / w)
+        w = max_w
+    if h > max_h:
+        w = max(min_w, w * max_h / h)
+        h = max_h
+    return w, h
+
+
+def add_one_image_attachment(doc, att, msg, exporter, sender_number, sent_at):
     doc, tag, text = doc.tagtext()
 
-    sent_at = datetime.fromtimestamp(msg['sent_at'] / 1000)
-    sender_number = msg['source']
+    att_path = exporter.export(att, sender_number, sent_at, msg, 0)
+    w, h = one_image_display_dimensions(att)
+
+    with tag('div', klass='image'):
+        if att_path is None:
+            # attachment wasn't downloaded :'(
+            # TODO add missing-file placeholder
+            return
+
+        if att['contentType'].startswith('image/'):
+            with tag('a', href=att_path, rel='noopener noreferrer', klass='button-link'):
+                doc.stag('img', width=w, height=h, src=att_path)
+        else:
+            with tag('video', 'controls', preload='none', width=w, height=h, src=att_path):
+                if att.get('screenshot'):  # a video may not have a screenshot
+                    screenshot_path = exporter.export(att['screenshot'], sender_number, sent_at, msg, 0,
+                                                      purpose_dir='screenshots')
+                    doc.attr(poster=screenshot_path)
+
+
+def add_several_attachments(doc, msg, exporter, sender_number, sent_at):
+    doc, tag, text = doc.tagtext()
 
     for idx, att in enumerate(msg['attachments']):
         att_path = exporter.export(att, sender_number, sent_at, msg, idx)
@@ -139,23 +183,18 @@ def add_attachments(doc, msg, exporter):
 
         if att['contentType'].startswith('audio/'):
             # one must not self-close html tags that may have children
-            doc.line('audio', '', 'controls', preload='metadata', src=att_path)
+            doc.line('audio', '', 'controls', preload='metadata', klass='audio-attachment', src=att_path)
 
         elif att['contentType'].startswith('image/'):
-            with tag('a', href=att_path, rel='noopener noreferrer'):
+            with tag('a', href=att_path, rel='noopener noreferrer', klass='button-link'):
                 doc.stag('img', src=thumbnail_path if thumbnail_path else att_path)
 
         elif att['contentType'].startswith('video/'):
             with tag('video', 'controls', preload='none', src=att_path):
-                if len(msg['attachments']) > 1:
-                    doc.attr(height=150, width=150, poster=thumbnail_path)
-                elif att.get('screenshot'):  # a video may not have a screenshot
-                    screenshot_path = exporter.export(att['screenshot'], sender_number, sent_at, msg, idx,
-                                                      purpose_dir='screenshots')
-                    doc.attr(poster=screenshot_path)
+                doc.attr(height=150, width=150, poster=thumbnail_path)
 
         else:
-            with tag('a', href=att_path, klass='generic-attachment'):
+            with tag('a', href=att_path, klass='button-link generic-attachment'):
                 with tag('div', klass='icon-container'):
                     with tag('div', klass='icon'):
                         _, ext = os.path.splitext(att_path)
@@ -168,7 +207,33 @@ def add_attachments(doc, msg, exporter):
                         text(f'{size / 1024:.2f} KB')
 
 
-def add_contacts(doc, contacts):
+def add_attachments(doc, msg, exporter):
+    doc, tag, text = doc.tagtext()
+
+    sent_at = datetime.fromtimestamp(msg['sent_at'] / 1000)
+    sender_number = msg['source']
+
+    # Signal currently allows to send either one or more image attachments (incl. videos) or one non-image attachment.
+    # In doubt we output any combination but with no guarantee of it being pretty.
+    if msg['attachments'][0].get('contentType', '').split('/')[0] in ['image', 'video']:
+        with tag('div', klass='attachment-container'):
+            with tag('div', klass='image-grid'):
+
+                # If there is a single image attachment, display it up to 300x450px and size the message around it
+                if len(msg['attachments']) == 1:
+                    doc.current_tag.attrs['class'] += ' one-image'
+                    add_one_image_attachment(doc, msg['attachments'][0], msg, exporter, sender_number, sent_at)
+
+                # For several image attachments, display their thumbnails in a full-width message
+                else:
+                    add_several_attachments(doc, msg, exporter, sender_number, sent_at)
+
+    # For a non-image attachment (or several), display them as links or audio elements in a full-width message
+    else:
+        add_several_attachments(doc, msg, exporter, sender_number, sent_at)
+
+
+def add_embedded_contacts(doc, contacts):
     # TODO display as HTML and/or export as vCard
     # TODO check if there can be a contact picture to export
     doc, tag, text = doc.tagtext()
@@ -215,20 +280,28 @@ def add_reactions(doc, reactions, contacts_by_number):
 def add_message(doc, msg, config, contacts_by_number, attachment_exporter):
     # TODO export stickers
     doc, tag, text = doc.tagtext()
-    klass = f'message {msg.get("type", "")}'
-    if msg.get('source'):
-        klass += ' ' + contact_class(msg['source'])
-    with tag('div', klass=klass):
+    with tag('div', klass=f'message {msg.get("type", "")}'):
+        if msg.get('source'):
+            doc.current_tag.attrs['class'] += ' ' + contact_class(msg['source'])
+
         with tag('div', klass='container'):
             if msg.get('type') == 'incoming':
                 add_author(doc, msg['source'], contacts_by_number)
             if msg.get('quote') is not None:
                 add_quote(doc, msg['quote'], contacts_by_number)
+
             if msg['attachments']:
                 if config['maxAttachments'] == 0 or stats['attachments'] < config['maxAttachments']:
+
+                    if len(msg['attachments']) == 1:
+                        if msg['attachments'][0].get('contentType', '').split('/')[0] in ['image', 'video']:
+                            image_width, _ = one_image_display_dimensions(msg["attachments"][0])
+                            doc.attr(style=f'width: {image_width + 2}px;')
+
                     add_attachments(doc, msg, attachment_exporter)
+
             if msg['contact']:
-                add_contacts(doc, msg['contact'])
+                add_embedded_contacts(doc, msg['contact'])
             if msg.get('body') is not None:
                 add_message_text(doc, msg['body'], 'message-text')
             if msg.get('errors') and config['includeTechnicalMessages']:
@@ -349,6 +422,7 @@ def export_conversation(conversation, msgs, config, contacts_by_number, attachme
             doc.line('title', conversation['displayName'])
             doc.stag('base', target='_blank')
             doc.stag('link', rel='stylesheet', href=resources_dir + '/contact-colors.css')
+            doc.stag('link', rel='stylesheet', href=resources_dir + '/sanitize.css')
             doc.stag('link', rel='stylesheet', href=resources_dir + '/signal-desktop.css')
             doc.stag('link', rel='stylesheet', href=resources_dir + '/style.css')
         with tag('body'):
@@ -357,7 +431,7 @@ def export_conversation(conversation, msgs, config, contacts_by_number, attachme
 
     logger.info('Writing out %s.html ...', conversation['fsName'])
     with open(html_file, 'w') as file:
-        # note: yattag.indent breaks messages that only contain a link (2020-05-14)
-        # https://github.com/leforestier/yattag/issues/62
+        # note: indenting breaks messages that only contain a link because of "white-space: pre-wrap;"
+        # workaround suggestions if indent is needed: https://github.com/leforestier/yattag/issues/62
         # file.write(yattag.indent(doc.getvalue()))
         file.write(doc.getvalue())

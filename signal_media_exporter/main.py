@@ -181,7 +181,7 @@ def run_export(config):
     # Copy resources
     os.makedirs(config['outputDir'], exist_ok=True)
     package_dir = os.path.dirname(sys.modules[__package__].__file__)
-    for file in ['file-gradient.svg', 'signal-desktop.css', 'style.css']:
+    for file in ['file-gradient.svg', 'sanitize.css', 'signal-desktop.css', 'style.css']:
         shutil.copy(os.path.join(package_dir, file), config['outputDir'])
         file_size = os.path.getsize(os.path.join(package_dir, file))
         logger.info('Copied %s [%.1f KiB]', file, file_size / 1024)

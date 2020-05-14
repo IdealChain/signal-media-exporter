@@ -1,6 +1,6 @@
 @charset "UTF-8";
 
-/* Copied (and simplified) from Signal Desktop 1.33.4 */
+/* Copied and adapted from Signal Desktop 1.33.4 */
 
 audio {
   max-width: 100%; }
@@ -68,6 +68,26 @@ a {
   background-color: #6b6b78; }
 
 
+.message .attachment-container {
+  text-align: center;
+  position: relative;
+  margin-left: -12px;
+  margin-right: -12px;
+  margin-top: -10px;
+  margin-bottom: -10px;
+  border-radius: 16px;
+  overflow: hidden;
+  background-color: #ffffff;
+    margin-bottom: 7px;
+    border-bottom-left-radius: 0px;
+    border-bottom-right-radius: 0px;
+    margin-top: 4px;
+    border-top-left-radius: 0px;
+    border-top-right-radius: 0px; }
+
+.message .audio-attachment {
+  margin-bottom: 5px;
+  margin-top: 6px; }
 
 .message .generic-attachment {
   background: none;
@@ -144,7 +164,6 @@ a {
 
 .message.incoming .generic-attachment .file-size {
   color: #ffffff; }
-
 
 
 .message .author {
@@ -392,6 +411,25 @@ header .title {
   text-overflow: ellipsis;
   -webkit-user-select: text;
   color: #1b1b1b; }
+
+
+.image {
+  position: relative;
+  display: inline-block;
+  margin: 1px;
+  vertical-align: middle; }
+
+.image.with-background {
+  background-color: #ffffff; }
+
+.image-grid {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  margin: -1px; }
+
+.image-grid.one-image {
+  margin-bottom: -5px; }
 
 
 .message .container {
