@@ -78,37 +78,25 @@ def add_author(doc, number, contacts_by_number):
     doc.line('div', contacts_by_number[number]['displayName'], klass='author')
 
 
-def add_message_line(doc, line):
-    doc, tag, text = doc.tagtext()
-    # isolate URLs to turn them into links
-    parts = url_re.split(line)
-    for part in parts:
-        if url_re.match(part):
-            with tag('a', href=part, rel='external noopener noreferrer'):
-                text(part)
-        else:
-            text(part)
-
-
-def add_message_text(doc, txt, klass):
-    doc, tag, text = doc.tagtext()
-    # replace newlines with <br/>
-    with tag('div', klass=klass):
-        lines = txt.split('\n')
-        add_message_line(doc, lines[0])
-        for line in lines[1:]:
-            doc.stag('br')
-            add_message_line(doc, line)
-
-
-def add_quote(doc, quote, contacts_by_number):
+def add_quote(doc, quote, contacts_by_number, html_ids_by_timestamp):
     doc, tag, text = doc.tagtext()
     with tag('div', klass='quote-container'):
-        with tag('div', klass=f'quote {contact_class(quote["author"])}'):
+        # link to quoted message, if known
+        with tag('a', klass=f'quote button-link {contact_class(quote["author"])}'):
+            quoted_id = html_ids_by_timestamp.get(quote["id"])
+            if quoted_id:
+                doc.attr(href=f'#{quoted_id}', target='_self')
+
             with tag('div', klass='primary'):
                 add_author(doc, quote['author'], contacts_by_number)
                 if quote.get('text') is not None:
-                    add_message_text(doc, quote['text'], 'quote-text')
+                    with tag('div', klass='quote-text'):
+                        # replace newlines with <br/>
+                        lines = quote['text'].split('\n')
+                        text(lines[0])
+                        for line in lines[1:]:
+                            doc.stag('br')
+                            text(line)
 
             # TODO display quote attachments
             # for att in quote.get('attachments', []):
@@ -242,6 +230,29 @@ def add_embedded_contacts(doc, contacts):
             text(json.dumps(contacts, indent=2))
 
 
+def add_message_line(doc, line):
+    doc, tag, text = doc.tagtext()
+    # isolate URLs to turn them into links
+    parts = url_re.split(line)
+    for part in parts:
+        if url_re.match(part):
+            with tag('a', href=part, rel='external noopener noreferrer'):
+                text(part)
+        else:
+            text(part)
+
+
+def add_message_text(doc, txt):
+    doc, tag, text = doc.tagtext()
+    # replace newlines with <br/>
+    with tag('div', klass='message-text'):
+        lines = txt.split('\n')
+        add_message_line(doc, lines[0])
+        for line in lines[1:]:
+            doc.stag('br')
+            add_message_line(doc, line)
+
+
 def add_errors(doc, errors):
     doc, tag, text = doc.tagtext()
     for error in errors:
@@ -277,7 +288,7 @@ def add_reactions(doc, reactions, contacts_by_number):
                         text(len(reactors))
 
 
-def add_message(doc, msg, config, contacts_by_number, attachment_exporter):
+def add_message(doc, msg, config, contacts_by_number, html_ids_by_timestamp, attachment_exporter):
     # TODO export stickers
     doc, tag, text = doc.tagtext()
     with tag('div', klass=f'message {msg.get("type", "")}'):
@@ -288,7 +299,7 @@ def add_message(doc, msg, config, contacts_by_number, attachment_exporter):
             if msg.get('type') == 'incoming':
                 add_author(doc, msg['source'], contacts_by_number)
             if msg.get('quote') is not None:
-                add_quote(doc, msg['quote'], contacts_by_number)
+                add_quote(doc, msg['quote'], contacts_by_number, html_ids_by_timestamp)
 
             if msg['attachments']:
                 if config['maxAttachments'] == 0 or stats['attachments'] < config['maxAttachments']:
@@ -303,7 +314,7 @@ def add_message(doc, msg, config, contacts_by_number, attachment_exporter):
             if msg['contact']:
                 add_embedded_contacts(doc, msg['contact'])
             if msg.get('body') is not None:
-                add_message_text(doc, msg['body'], 'message-text')
+                add_message_text(doc, msg['body'])
             if msg.get('errors') and config['includeTechnicalMessages']:
                 add_errors(doc, msg['errors'])
             add_message_metadata(doc, msg)
@@ -382,11 +393,13 @@ def add_notifications(doc, msg, contacts_by_number):
 
 def add_main(doc, msgs, config, contacts_by_number, attachment_exporter, conversation_name):
     doc, tag, text = doc.tagtext()
+    html_ids_by_timestamp = {}
     with tag('main'):
         for i, msg in enumerate(msgs):
-            with tag('div', klass='message-container'):
+            html_ids_by_timestamp[msg['sent_at']] = f'm{i}'
+            with tag('div', id=f'm{i}', klass='message-container'):
                 if msg.get('type') in ['incoming', 'outgoing'] and not msg.get('group_update') and not msg.get('expirationTimerUpdate'):
-                    add_message(doc, msg, config, contacts_by_number, attachment_exporter)
+                    add_message(doc, msg, config, contacts_by_number, html_ids_by_timestamp, attachment_exporter)
                 elif config['includeTechnicalMessages']:
                     add_notifications(doc, msg, contacts_by_number)
             if i > 0 and not i % 100:
