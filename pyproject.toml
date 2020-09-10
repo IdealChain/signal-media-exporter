@@ -10,8 +10,8 @@ include = [
 
 [tool.poetry.dependencies]
 python = "^3.6"
-pysqlcipher3 = "^1.0"
 coloredlogs = "^10.0"
+sqlcipher3-binary = "^0.4.2"
 
 [tool.poetry.dev-dependencies]
 rope = "^0.14.0"

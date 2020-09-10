@@ -20,13 +20,17 @@ Requirements
 
 ### libsqlcipher
 
-`libsqlcipher>=3.30` must be installed on your system prior to installation of `pysqlcipher`, so that the binary extension module can be compiled. Consult your operating system documentation for how to install SQL Cipher. You can also manually build SQL Cipher by cloning [sqlcipher](https://github.com/sqlcipher/sqlcipher) and following the build instructions, followed by `sudo make install && sudo ldconfig`.
+If you're using Linux, you can use the `sqlcipher3-binary` pip package with a completely self-contained sqlcipher3, statically-linked against the most recent release of libsqlcipher.
 
-For Arch Linux, you can install the [sqlcipher](https://www.archlinux.org/packages/community/x86_64/sqlcipher/) package. For Debian, there is a (currently outdated) [libsqlcipher-dev](https://packages.debian.org/stable/libsqlcipher-dev) package.
+Otherwise, you need to use the `sqlcipher3` pip package. Then, `libsqlcipher>=3.30` must be installed on your system **before** installing the pip package, so that the binary extension module can be compiled. (In case you get a `No module named 'sqlcipher3'` error afterwards, the compilation most likely failed due to the library not being found.)
+
+Consult your operating system documentation for how to install SQL Cipher. For Arch Linux, you can install the [sqlcipher](https://www.archlinux.org/packages/community/x86_64/sqlcipher/) package. For Debian, there is a (currently outdated) [libsqlcipher-dev](https://packages.debian.org/stable/libsqlcipher-dev) package.
+
+You can also manually build libsqlcipher by cloning the [sqlcipher repository](https://github.com/sqlcipher/sqlcipher) and following the build instructions, followed by `sudo make install && sudo ldconfig`.
 
 ### Python (>=3.6)
 
-* [pysqlcipher3](https://github.com/rigglemania/pysqlcipher3) (via pip)
+* [sqlcipher3(-binary)](https://github.com/coleifer/sqlcipher3) (via pip)
 * [coloredlogs](https://github.com/xolox/python-coloredlogs) (via pip)
 
 If you have poetry installed, you can run:

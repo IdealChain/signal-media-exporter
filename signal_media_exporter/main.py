@@ -12,7 +12,7 @@ import sys
 
 from datetime import datetime
 from pathlib import Path
-from pysqlcipher3 import dbapi2 as sqlite
+from sqlcipher3 import dbapi2 as sqlite
 
 logger = logging.getLogger(__name__)
 
