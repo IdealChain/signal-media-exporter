@@ -1,10 +1,10 @@
 [[package]]
 name = "colorama"
-version = "0.4.1"
+version = "0.4.4"
 description = "Cross-platform colored terminal text."
 category = "main"
 optional = false
-python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
 marker = "sys_platform == \"win32\""
 
 [[package]]
@@ -24,11 +24,11 @@ humanfriendly = ">=4.7"
 
 [[package]]
 name = "humanfriendly"
-version = "4.18"
+version = "9.1"
 description = "Human friendly output for text interfaces using Python"
 category = "main"
 optional = false
-python-versions = "*"
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
 
 [package.dependencies]
 pyreadline = "*"
@@ -52,7 +52,7 @@ python-versions = "*"
 
 [[package]]
 name = "sqlcipher3-binary"
-version = "0.4.2"
+version = "0.4.5"
 description = "DB-API 2.0 interface for SQLCipher 3.x"
 category = "main"
 optional = false
@@ -61,20 +61,20 @@ python-versions = "*"
 [metadata]
 lock-version = "1.0"
 python-versions = "^3.6"
-content-hash = "3053611ca36f53595b76750a441d522c74f32d78663a168ca0036503561184a4"
+content-hash = "7300f1e51c738ee7808ba7303fa58a5c65e4feb8ef6648beb015f26e75a719e5"
 
 [metadata.files]
 colorama = [
-    {file = "colorama-0.4.1-py2.py3-none-any.whl", hash = "sha256:f8ac84de7840f5b9c4e3347b3c1eaa50f7e49c2b07596221daec5edaabbd7c48"},
-    {file = "colorama-0.4.1.tar.gz", hash = "sha256:05eed71e2e327246ad6b38c540c4a3117230b19679b875190486ddd2d721422d"},
+    {file = "colorama-0.4.4-py2.py3-none-any.whl", hash = "sha256:9f47eda37229f68eee03b24b9748937c7dc3868f906e8ba69fbcbdd3bc5dc3e2"},
+    {file = "colorama-0.4.4.tar.gz", hash = "sha256:5941b2b48a20143d2267e95b1c2a7603ce057ee39fd88e7329b0c292aa16869b"},
 ]
 coloredlogs = [
     {file = "coloredlogs-10.0-py2.py3-none-any.whl", hash = "sha256:34fad2e342d5a559c31b6c889e8d14f97cb62c47d9a2ae7b5ed14ea10a79eff8"},
     {file = "coloredlogs-10.0.tar.gz", hash = "sha256:b869a2dda3fa88154b9dd850e27828d8755bfab5a838a1c97fbc850c6e377c36"},
 ]
 humanfriendly = [
-    {file = "humanfriendly-4.18-py2.py3-none-any.whl", hash = "sha256:23057b10ad6f782e7bc3a20e3cb6768ab919f619bbdc0dd75691121bbde5591d"},
-    {file = "humanfriendly-4.18.tar.gz", hash = "sha256:33ee8ceb63f1db61cce8b5c800c531e1a61023ac5488ccde2ba574a85be00a85"},
+    {file = "humanfriendly-9.1-py2.py3-none-any.whl", hash = "sha256:d5c731705114b9ad673754f3317d9fa4c23212f36b29bdc4272a892eafc9bc72"},
+    {file = "humanfriendly-9.1.tar.gz", hash = "sha256:066562956639ab21ff2676d1fda0b5987e985c534fc76700a19bd54bcb81121d"},
 ]
 pyreadline = [
     {file = "pyreadline-2.1.win-amd64.exe", hash = "sha256:9ce5fa65b8992dfa373bddc5b6e0864ead8f291c94fbfec05fbd5c836162e67b"},
@@ -87,7 +87,8 @@ rope = [
     {file = "rope-0.14.0.tar.gz", hash = "sha256:c5c5a6a87f7b1a2095fb311135e2a3d1f194f5ecb96900fdd0a9100881f48aaf"},
 ]
 sqlcipher3-binary = [
-    {file = "sqlcipher3_binary-0.4.2-cp36-cp36m-manylinux1_x86_64.whl", hash = "sha256:52969904c63197a8e4656b50838d7a1cdc374194667c126e5f0a558c4b206b8b"},
-    {file = "sqlcipher3_binary-0.4.2-cp37-cp37m-manylinux1_x86_64.whl", hash = "sha256:816df8036305cfad27c6ad6c4a4ebfd29fbe7a7364d959588b6dbd29bce69dc0"},
-    {file = "sqlcipher3_binary-0.4.2-cp38-cp38-manylinux1_x86_64.whl", hash = "sha256:1f95560820f7495af8a4cd24bc7dab4ec1144b6eae6acd8295a2b569fe81609b"},
+    {file = "sqlcipher3_binary-0.4.5-cp36-cp36m-manylinux1_x86_64.whl", hash = "sha256:dcd08c8c0e5f012263ed46fe116c5541c843d67c4d18f9e17673096099b3f9f7"},
+    {file = "sqlcipher3_binary-0.4.5-cp37-cp37m-manylinux1_x86_64.whl", hash = "sha256:91d14b2791aff7c67d8c9961b6112a4ef4270c3ed18f171218031e335da5d150"},
+    {file = "sqlcipher3_binary-0.4.5-cp38-cp38-manylinux1_x86_64.whl", hash = "sha256:8e09a8a9b85c33ac3dc58733f28a6d34f97f3f9ebd644b28744a78b01da46417"},
+    {file = "sqlcipher3_binary-0.4.5-cp39-cp39-manylinux1_x86_64.whl", hash = "sha256:cb4730389eda20f5828d5910401ce6017ad608105800b47482a8df3103779e9c"},
 ]
