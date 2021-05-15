@@ -13,6 +13,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from sqlcipher3 import dbapi2 as sqlite
+from contextlib import contextmanager
+from alive_progress import alive_bar
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +162,6 @@ def save_attachments(config, hashes, id, msg):
     return stats
 
 def main():
-    coloredlogs.install()
     config = {
         'config': './config.json',
         'maxMessages': 0,
@@ -180,6 +181,8 @@ def main():
                         help=f"Signal Desktop profile directory (default: {config['signalDir']})")
     parser.add_argument('-e', '--include-expiring-messages', action='store_const', const=True,
                         help="include expiring messages (default: no)")
+    parser.add_argument('-v', '--verbose', action='store_const', const=True,
+                        help="enable verbose logging (default: no)")
     parser.add_argument('--max-messages', metavar='N', nargs='?', type=int,
                         help=f"Export media for at most N messages then stop (default: 0 = no limit)")
     args = parser.parse_args()
@@ -197,6 +200,12 @@ def main():
         arg_camelcase = ''.join(w.lower() if i == 0 else w.title() for i,w in enumerate(arg.split('_')))
         config[arg_camelcase] = value
 
+    # configure logging verbosity
+    verbose = config.get('verbose', False)
+    coloredlogs.install(
+        level=logging.INFO if verbose else logging.ERROR,
+        fmt='%(asctime)s %(levelname)s %(message)s')
+
     # sanitize phone numbers: remove non-digits
     sanitize = lambda no: re.sub('[^+\d]', '', no)
     try: config['map'] = { sanitize(number): name for number, name in config['map'].items() }
@@ -213,22 +222,58 @@ def main():
     stats = {}
     hashes = {}
 
-    for i, msg in enumerate(msgs):
-        msg_stats = save_attachments(config, hashes, *msg)
-        for key, value in msg_stats.items() if msg_stats else {}:
-            stats[key] = stats.setdefault(key, 0) + value
-        if i > 0 and not i % 50:
-            logger.info('%04d/%04d messages | %.1f %% processed', i, len(msgs), i/len(msgs)*100)
+    with progress(verbose, stats, len(msgs)) as report:
+        for msg in msgs:
+            msg_stats = save_attachments(config, hashes, *msg)
+            for key, value in msg_stats.items() if msg_stats else {}:
+                stats[key] = stats.setdefault(key, 0) + value
+
+            report()
 
     if not stats:
         logger.error('No media messages found.')
         sys.exit(-1)
 
-    logger.info(
-        'Done. %d messages, %d media attachments [%.1f MiB], %d attachments saved [%.1f MiB].',
-        len(msgs),
-        stats['attachments'],
-        stats['attachments_size'] / 2 ** 20,
-        stats['saved_attachments'],
-        stats['saved_attachments_size'] / 2 ** 20,
-    )
+
+@contextmanager
+def progress(verbose, stats, total):
+    i = 0
+    stats_frequency = 50
+
+    def msg_stats():
+        return '{:04d}/{:04d} messages | {:.1f} % processed'.format(
+            i, total, i * 100 / total)
+
+    def size_stats():
+        return '{0:.1f}/{1:.1f} MiB'.format(
+            stats['saved_attachments_size'] / 2 ** 20,
+            stats['attachments_size'] / 2 ** 20)
+
+    if verbose:
+        def report():
+            nonlocal i
+            i += 1
+            if not i % stats_frequency:
+                logger.info('%s [%s]', msg_stats(), size_stats())
+
+        yield report
+
+        logger.info(
+            'Done. %d messages, %d media attachments [%.1f MiB], %d attachments saved [%.1f MiB].',
+            i,
+            stats['attachments'],
+            stats['attachments_size'] / 2 ** 20,
+            stats['saved_attachments'],
+            stats['saved_attachments_size'] / 2 ** 20,
+        )
+
+    else:
+        with alive_bar(total, title='Exporting...') as bar:
+            def report():
+                nonlocal i
+                i += 1
+                bar()
+                if not i % stats_frequency:
+                    bar.text(size_stats())
+
+            yield report

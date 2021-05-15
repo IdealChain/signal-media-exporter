@@ -12,9 +12,11 @@ include = [
 python = "^3.6"
 coloredlogs = "^10.0"
 sqlcipher3-binary = "^0.4.5"
+alive-progress = "^1.6.2"
 
 [tool.poetry.dev-dependencies]
 rope = "^0.14.0"
+flake8 = "^3.9.0"
 
 [tool.poetry.scripts]
 signal-media-exporter = "signal_media_exporter:main"
