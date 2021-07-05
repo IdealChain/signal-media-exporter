@@ -1,6 +1,7 @@
 {
     "outputDir": "./media",
     "includeExpiringMessages": false,
+    "includeAttachments": "visual",
     "map": {
         "+430000000000": "Me",
         "+430000000001": "My buddy"
