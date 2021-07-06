@@ -108,10 +108,10 @@ def save_attachments(config, hashes, id, msg):
         return
 
     for idx, at in enumerate(msg['attachments']):
-        if at['contentType'].lower().startswith(('image/', 'video/', 'audio/')):
-            ext = at['contentType'].lower().split('/')[1]
-        else:
+        if not at['contentType'].lower().startswith(('image/', 'video/', 'audio/')):
             continue
+
+        ext = get_file_extension(at)
 
         name = ['signal', sent.strftime('%Y-%m-%d-%H%M%S')]
         if len(msg['attachments']) > 1:
@@ -160,6 +160,20 @@ def save_attachments(config, hashes, id, msg):
         hashes.setdefault(quick_hash, []).append(src)
 
     return stats
+
+
+def get_file_extension(at):
+    """
+    >>> get_file_extension({'contentType': 'image/jpeg'})
+    'jpeg'
+    >>> get_file_extension({'contentType': 'audio/ogg; codecs=opus'})
+    'ogg'
+    """
+    ext = at['contentType'].lower().split('/')[1]
+    if ';' in ext:
+        ext = ext.split(';')[0]
+    return ext
+
 
 def main():
     config = {
