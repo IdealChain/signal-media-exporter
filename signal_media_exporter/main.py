@@ -40,9 +40,21 @@ def get_messages(config, key):
         own_number, device_id = number_id['value'].split('.')
         logger.info('Own number: %s, device ID: %s', own_number, device_id)
 
-        cond = ["hasVisualMediaAttachments > 0"]
+        cond = []
+
+        include = config.get('includeAttachments', "visual")
+        if include == "visual":
+            cond.append("hasVisualMediaAttachments > 0")
+        elif include == "file":
+            cond.append("hasFileAttachments > 0")
+        elif include == "all":
+            cond.append("hasAttachments > 0")
+        else:
+            raise ValueError(f"Invalid value '{include}' for 'includeAttachments' in config ")
+
         if not config.get('includeExpiringMessages', False):
             cond.append("expires_at is null")
+
         c.execute(f"""
             select id, json
             from messages
@@ -195,6 +207,8 @@ def main():
                         help=f"Signal Desktop profile directory (default: {config['signalDir']})")
     parser.add_argument('-e', '--include-expiring-messages', action='store_const', const=True,
                         help="include expiring messages (default: no)")
+    parser.add_argument('-a', '--include-attachments', nargs='?', type=str,
+                        help="Which attachments to include (default: visual). Choices: [visual, all]")
     parser.add_argument('-v', '--verbose', action='store_const', const=True,
                         help="enable verbose logging (default: no)")
     parser.add_argument('--max-messages', metavar='N', nargs='?', type=int,
