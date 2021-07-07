@@ -45,6 +45,8 @@ def get_messages(config, key):
         include = config.get('includeAttachments', "visual")
         if include == "visual":
             cond.append("hasVisualMediaAttachments > 0")
+        elif include == "file":
+            cond.append("hasFileAttachments > 0")
         elif include == "all":
             cond.append("hasAttachments > 0")
         else:
