@@ -41,13 +41,18 @@ def get_messages(config, key):
         logger.info('Own number: %s, device ID: %s', own_number, device_id)
 
         cond = []
+
         include = config.get('includeAttachments', "visual")
         if include == "visual":
             cond.append("hasVisualMediaAttachments > 0")
         elif include == "all":
             cond.append("hasAttachments > 0")
+        else:
+            raise ValueError(f"Invalid value '{include}' for 'includeAttachments' in config ")
+
         if not config.get('includeExpiringMessages', False):
             cond.append("expires_at is null")
+
         c.execute(f"""
             select id, json
             from messages
