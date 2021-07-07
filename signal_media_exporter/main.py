@@ -139,10 +139,10 @@ def save_attachments(config, hashes, msg_id, msg):
             continue
         # if accessing a Windows signal database, need to fix paths
         if '\\' in at['path']:
-            atPath = os.path.join(*at['path'].split('\\'))
+            at_path = os.path.join(*at['path'].split('\\'))
         else:
-            atPath = at['path']
-        src = os.path.join(config['signalDir'], 'attachments.noindex', atPath)
+            at_path = at['path']
+        src = os.path.join(config['signalDir'], 'attachments.noindex', at_path)
         dst = os.path.join(config['outputDir'], sender, name)
         if not os.path.exists(src):
             logger.warning('Skipping %s/%s (media file not found)', sender, name)
