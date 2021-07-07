@@ -196,7 +196,7 @@ def sanitize_phone_number(no: str) -> str:
     """
     Sanitize phone numbers by removing non-digits.
     """
-    return re.sub('[^+\d]', '', no)
+    return re.sub(r'[^+\d]', '', no)
 
 
 def main():
