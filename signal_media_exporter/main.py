@@ -100,7 +100,7 @@ def hash_file_sha256(path):
         return sha256.hexdigest()
 
 
-def save_attachments(config, hashes, id, msg):
+def save_attachments(config, hashes, msg_id, msg):
     stats = {
         'attachments': 0,
         'attachments_size': 0,
@@ -119,9 +119,9 @@ def save_attachments(config, hashes, id, msg):
 
     except KeyError as e:
         if e.args[0].startswith('+'):
-            logger.warning('Skipping %s (number not mapped: "%s")', id, '.'.join(e.args))
+            logger.warning('Skipping %s (number not mapped: "%s")', msg_id, '.'.join(e.args))
         else:
-            logger.warning('Skipping %s (field missing: "%s")', id, '.'.join(e.args))
+            logger.warning('Skipping %s (field missing: "%s")', msg_id, '.'.join(e.args))
         return
 
     for idx, at in enumerate(msg['attachments']):
