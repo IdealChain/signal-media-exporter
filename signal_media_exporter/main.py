@@ -110,7 +110,6 @@ def save_attachments(config, hashes, msg_id, msg):
 
     try:
         sent = datetime.fromtimestamp(msg['sent_at'] / 1000)
-        recvd = datetime.fromtimestamp(msg['received_at'] / 1000)
 
         # translate number of sender to name
         sender = msg['source']
