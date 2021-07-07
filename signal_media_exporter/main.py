@@ -192,6 +192,13 @@ def get_file_extension(at):
     return ext
 
 
+def sanitize_phone_number(no: str) -> str:
+    """
+    Sanitize phone numbers by removing non-digits.
+    """
+    return re.sub('[^+\d]', '', no)
+
+
 def main():
     config = {
         'config': './config.json',
@@ -241,10 +248,8 @@ def main():
         level=logging.INFO if verbose else logging.ERROR,
         fmt='%(asctime)s %(levelname)s %(message)s')
 
-    # sanitize phone numbers: remove non-digits
-    sanitize = lambda no: re.sub('[^+\d]', '', no)
     try:
-        config['map'] = {sanitize(number): name for number, name in config['map'].items()}
+        config['map'] = {sanitize_phone_number(number): name for number, name in config['map'].items()}
     except KeyError:
         pass
 
