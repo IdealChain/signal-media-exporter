@@ -76,7 +76,8 @@ def get_messages(config, key):
     except sqlite.DatabaseError as err:
         logger.fatal(
             'DatabaseError "%s" - please check the database and the sqlcipher parameters!',
-            ' | '.join(err.args))
+            ' | '.join(err.args)
+        )
 
     finally:
         conn.close()
@@ -210,20 +211,49 @@ def main():
     }
 
     parser = argparse.ArgumentParser(description='Media file exporter for Signal Desktop.')
-    parser.add_argument('-c', '--config', nargs='?', type=str,
-                        help=f"path of config file to read (default: {config['config']})")
-    parser.add_argument('-o', '--output-dir', nargs='?', type=str,
-                        help=f"output directory for media files (default: {config['outputDir']})")
-    parser.add_argument('-s', '--signal-dir', nargs='?', type=str,
-                        help=f"Signal Desktop profile directory (default: {config['signalDir']})")
-    parser.add_argument('-e', '--include-expiring-messages', action='store_const', const=True,
-                        help="include expiring messages (default: no)")
-    parser.add_argument('-a', '--include-attachments', nargs='?', type=str,
-                        help="Which attachments to include (default: visual). Choices: [visual, all]")
-    parser.add_argument('-v', '--verbose', action='store_const', const=True,
-                        help="enable verbose logging (default: no)")
-    parser.add_argument('--max-messages', metavar='N', nargs='?', type=int,
-                        help=f"Export media for at most N messages then stop (default: 0 = no limit)")
+    parser.add_argument(
+        '-c', '--config',
+        nargs='?',
+        type=str,
+        help=f"path of config file to read (default: {config['config']})"
+    )
+    parser.add_argument(
+        '-o', '--output-dir',
+        nargs='?',
+        type=str,
+        help=f"output directory for media files (default: {config['outputDir']})"
+    )
+    parser.add_argument(
+        '-s', '--signal-dir',
+        nargs='?',
+        type=str,
+        help=f"Signal Desktop profile directory (default: {config['signalDir']})"
+    )
+    parser.add_argument(
+        '-e', '--include-expiring-messages',
+        action='store_const',
+        const=True,
+        help="include expiring messages (default: no)"
+    )
+    parser.add_argument(
+        '-a', '--include-attachments',
+        nargs='?',
+        type=str,
+        help="Which attachments to include (default: visual). Choices: [visual, all]"
+    )
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_const',
+        const=True,
+        help="enable verbose logging (default: no)"
+    )
+    parser.add_argument(
+        '--max-messages',
+        metavar='N',
+        nargs='?',
+        type=int,
+        help=f"Export media for at most N messages then stop (default: 0 = no limit)"
+    )
     args = parser.parse_args()
 
     # command line args override the settings from the config file, which override the default settings
@@ -245,7 +275,8 @@ def main():
     verbose = config.get('verbose', False)
     coloredlogs.install(
         level=logging.INFO if verbose else logging.ERROR,
-        fmt='%(asctime)s %(levelname)s %(message)s')
+        fmt='%(asctime)s %(levelname)s %(message)s',
+    )
 
     try:
         config['map'] = {sanitize_phone_number(number): name for number, name in config['map'].items()}
@@ -283,12 +314,16 @@ def progress(verbose, stats, total):
 
     def msg_stats():
         return '{:04d}/{:04d} messages | {:.1f} % processed'.format(
-            i, total, i * 100 / total)
+            i,
+            total,
+            i * 100 / total
+        )
 
     def size_stats():
         return '{0:.1f}/{1:.1f} MiB'.format(
             stats['saved_attachments_size'] / 2 ** 20,
-            stats['attachments_size'] / 2 ** 20)
+            stats['attachments_size'] / 2 ** 20
+        )
 
     if verbose:
         def report():
