@@ -313,17 +313,10 @@ def progress(verbose, stats, total):
     stats_frequency = 50
 
     def msg_stats():
-        return '{:04d}/{:04d} messages | {:.1f} % processed'.format(
-            i,
-            total,
-            i * 100 / total
-        )
+        return f'{i:04d}/{total:04d} messages | {i * 100 / total:.1f} % processed'
 
     def size_stats():
-        return '{0:.1f}/{1:.1f} MiB'.format(
-            stats['saved_attachments_size'] / 2 ** 20,
-            stats['attachments_size'] / 2 ** 20
-        )
+        return f'{stats["saved_attachments_size"] / 2 ** 20:.1f}/{stats["attachments_size"] / 2 ** 20:.1f} MiB'
 
     if verbose:
         def report():
