@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 
 import argparse
-import coloredlogs
-import logging
 import hashlib
 import json
+import logging
 import os
-import shutil
 import re
+import shutil
 import sys
-
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from sqlcipher3 import dbapi2 as sqlite
-from contextlib import contextmanager
+
+import coloredlogs
 from alive_progress import alive_bar
+from sqlcipher3 import dbapi2 as sqlite
 
 logger = logging.getLogger(__name__)
+
 
 def get_key(config):
     with open(os.path.join(config['signalDir'], 'config.json'), 'r') as f:
@@ -25,6 +26,7 @@ def get_key(config):
     key = signal_config['key']
     logger.info('Read sqlcipher key: 0x%s...', key[:8])
     return key
+
 
 def get_messages(config, key):
     logger.info('Connecting to sql/db.sqlite, reading messages...')
@@ -58,10 +60,10 @@ def get_messages(config, key):
         c.execute(f"""
             select id, json
             from messages
-            where { ' and '.join(cond) }
-            order by sent_at asc
+            where {' and '.join(cond)}
+            order by sent_at 
             {f'limit {config["maxMessages"]}' if config["maxMessages"] > 0 else ''}
-            """)
+        """)
 
         for row in c:
             msg = json.loads(row[1])
@@ -69,7 +71,7 @@ def get_messages(config, key):
             if 'source' not in msg and msg['type'] == 'outgoing':
                 msg['source'] = own_number
 
-            yield (row[0], msg)
+            yield row[0], msg
 
     except sqlite.DatabaseError as err:
         logger.fatal(
@@ -79,10 +81,12 @@ def get_messages(config, key):
     finally:
         conn.close()
 
+
 def hash_file_quick(path):
     with open(path, 'br') as f:
         data = f.read(2 ** 10)
         return hash(data)
+
 
 def hash_file_sha256(path):
     sha256 = hashlib.sha256()
@@ -94,6 +98,7 @@ def hash_file_sha256(path):
             sha256.update(data)
 
         return sha256.hexdigest()
+
 
 def save_attachments(config, hashes, id, msg):
     stats = {
@@ -220,12 +225,14 @@ def main():
         with open(args.config if args.config else config['config'], 'r') as f:
             config = {**config, **json.load(f)}
     except FileNotFoundError:
-        if args.config: raise
+        if args.config:
+            raise
 
     for arg, value in vars(args).items():
-        if value is None: continue
+        if value is None:
+            continue
 
-        arg_camelcase = ''.join(w.lower() if i == 0 else w.title() for i,w in enumerate(arg.split('_')))
+        arg_camelcase = ''.join(w.lower() if i == 0 else w.title() for i, w in enumerate(arg.split('_')))
         config[arg_camelcase] = value
 
     # configure logging verbosity
@@ -236,8 +243,10 @@ def main():
 
     # sanitize phone numbers: remove non-digits
     sanitize = lambda no: re.sub('[^+\d]', '', no)
-    try: config['map'] = { sanitize(number): name for number, name in config['map'].items() }
-    except KeyError: pass
+    try:
+        config['map'] = {sanitize(number): name for number, name in config['map'].items()}
+    except KeyError:
+        pass
 
     # validate maxMessages
     if config['maxMessages'] < 0:
