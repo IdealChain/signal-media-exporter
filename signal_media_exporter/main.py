@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 
 import argparse
-import coloredlogs
-import logging
 import hashlib
 import json
+import logging
 import os
-import shutil
 import re
+import shutil
 import sys
-
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from sqlcipher3 import dbapi2 as sqlite
-from contextlib import contextmanager
+
+import coloredlogs
 from alive_progress import alive_bar
+from sqlcipher3 import dbapi2 as sqlite
 
 logger = logging.getLogger(__name__)
+
 
 def get_key(config):
     with open(os.path.join(config['signalDir'], 'config.json'), 'r') as f:
@@ -25,6 +26,7 @@ def get_key(config):
     key = signal_config['key']
     logger.info('Read sqlcipher key: 0x%s...', key[:8])
     return key
+
 
 def get_messages(config, key):
     logger.info('Connecting to sql/db.sqlite, reading messages...')
@@ -58,10 +60,10 @@ def get_messages(config, key):
         c.execute(f"""
             select id, json
             from messages
-            where { ' and '.join(cond) }
-            order by sent_at asc
+            where {' and '.join(cond)}
+            order by sent_at 
             {f'limit {config["maxMessages"]}' if config["maxMessages"] > 0 else ''}
-            """)
+        """)
 
         for row in c:
             msg = json.loads(row[1])
@@ -69,20 +71,23 @@ def get_messages(config, key):
             if 'source' not in msg and msg['type'] == 'outgoing':
                 msg['source'] = own_number
 
-            yield (row[0], msg)
+            yield row[0], msg
 
     except sqlite.DatabaseError as err:
         logger.fatal(
             'DatabaseError "%s" - please check the database and the sqlcipher parameters!',
-            ' | '.join(err.args))
+            ' | '.join(err.args)
+        )
 
     finally:
         conn.close()
+
 
 def hash_file_quick(path):
     with open(path, 'br') as f:
         data = f.read(2 ** 10)
         return hash(data)
+
 
 def hash_file_sha256(path):
     sha256 = hashlib.sha256()
@@ -95,7 +100,8 @@ def hash_file_sha256(path):
 
         return sha256.hexdigest()
 
-def save_attachments(config, hashes, id, msg):
+
+def save_attachments(config, hashes, msg_id, msg):
     stats = {
         'attachments': 0,
         'attachments_size': 0,
@@ -105,7 +111,6 @@ def save_attachments(config, hashes, id, msg):
 
     try:
         sent = datetime.fromtimestamp(msg['sent_at'] / 1000)
-        recvd = datetime.fromtimestamp(msg['received_at'] / 1000)
 
         # translate number of sender to name
         sender = msg['source']
@@ -114,9 +119,9 @@ def save_attachments(config, hashes, id, msg):
 
     except KeyError as e:
         if e.args[0].startswith('+'):
-            logger.warning('Skipping %s (number not mapped: "%s")', id, '.'.join(e.args))
+            logger.warning('Skipping %s (number not mapped: "%s")', msg_id, '.'.join(e.args))
         else:
-            logger.warning('Skipping %s (field missing: "%s")', id, '.'.join(e.args))
+            logger.warning('Skipping %s (field missing: "%s")', msg_id, '.'.join(e.args))
         return
 
     for idx, at in enumerate(msg['attachments']):
@@ -135,10 +140,10 @@ def save_attachments(config, hashes, id, msg):
             continue
         # if accessing a Windows signal database, need to fix paths
         if '\\' in at['path']:
-            atPath = os.path.join(*at['path'].split('\\'))
+            at_path = os.path.join(*at['path'].split('\\'))
         else:
-            atPath = at['path']
-        src = os.path.join(config['signalDir'], 'attachments.noindex', atPath)
+            at_path = at['path']
+        src = os.path.join(config['signalDir'], 'attachments.noindex', at_path)
         dst = os.path.join(config['outputDir'], sender, name)
         if not os.path.exists(src):
             logger.warning('Skipping %s/%s (media file not found)', sender, name)
@@ -187,6 +192,13 @@ def get_file_extension(at):
     return ext
 
 
+def sanitize_phone_number(no: str) -> str:
+    """
+    Sanitize phone numbers by removing non-digits.
+    """
+    return re.sub(r'[^+\d]', '', no)
+
+
 def main():
     config = {
         'config': './config.json',
@@ -199,20 +211,49 @@ def main():
     }
 
     parser = argparse.ArgumentParser(description='Media file exporter for Signal Desktop.')
-    parser.add_argument('-c', '--config', nargs='?', type=str,
-                        help=f"path of config file to read (default: {config['config']})")
-    parser.add_argument('-o', '--output-dir', nargs='?', type=str,
-                        help=f"output directory for media files (default: {config['outputDir']})")
-    parser.add_argument('-s', '--signal-dir', nargs='?', type=str,
-                        help=f"Signal Desktop profile directory (default: {config['signalDir']})")
-    parser.add_argument('-e', '--include-expiring-messages', action='store_const', const=True,
-                        help="include expiring messages (default: no)")
-    parser.add_argument('-a', '--include-attachments', nargs='?', type=str,
-                        help="Which attachments to include (default: visual). Choices: [visual, all]")
-    parser.add_argument('-v', '--verbose', action='store_const', const=True,
-                        help="enable verbose logging (default: no)")
-    parser.add_argument('--max-messages', metavar='N', nargs='?', type=int,
-                        help=f"Export media for at most N messages then stop (default: 0 = no limit)")
+    parser.add_argument(
+        '-c', '--config',
+        nargs='?',
+        type=str,
+        help=f"path of config file to read (default: {config['config']})"
+    )
+    parser.add_argument(
+        '-o', '--output-dir',
+        nargs='?',
+        type=str,
+        help=f"output directory for media files (default: {config['outputDir']})"
+    )
+    parser.add_argument(
+        '-s', '--signal-dir',
+        nargs='?',
+        type=str,
+        help=f"Signal Desktop profile directory (default: {config['signalDir']})"
+    )
+    parser.add_argument(
+        '-e', '--include-expiring-messages',
+        action='store_const',
+        const=True,
+        help="include expiring messages (default: no)"
+    )
+    parser.add_argument(
+        '-a', '--include-attachments',
+        nargs='?',
+        type=str,
+        help="Which attachments to include (default: visual). Choices: [visual, all]"
+    )
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_const',
+        const=True,
+        help="enable verbose logging (default: no)"
+    )
+    parser.add_argument(
+        '--max-messages',
+        metavar='N',
+        nargs='?',
+        type=int,
+        help=f"Export media for at most N messages then stop (default: 0 = no limit)"
+    )
     args = parser.parse_args()
 
     # command line args override the settings from the config file, which override the default settings
@@ -220,24 +261,27 @@ def main():
         with open(args.config if args.config else config['config'], 'r') as f:
             config = {**config, **json.load(f)}
     except FileNotFoundError:
-        if args.config: raise
+        if args.config:
+            raise
 
     for arg, value in vars(args).items():
-        if value is None: continue
+        if value is None:
+            continue
 
-        arg_camelcase = ''.join(w.lower() if i == 0 else w.title() for i,w in enumerate(arg.split('_')))
+        arg_camelcase = ''.join(w.lower() if i == 0 else w.title() for i, w in enumerate(arg.split('_')))
         config[arg_camelcase] = value
 
     # configure logging verbosity
     verbose = config.get('verbose', False)
     coloredlogs.install(
         level=logging.INFO if verbose else logging.ERROR,
-        fmt='%(asctime)s %(levelname)s %(message)s')
+        fmt='%(asctime)s %(levelname)s %(message)s',
+    )
 
-    # sanitize phone numbers: remove non-digits
-    sanitize = lambda no: re.sub('[^+\d]', '', no)
-    try: config['map'] = { sanitize(number): name for number, name in config['map'].items() }
-    except KeyError: pass
+    try:
+        config['map'] = {sanitize_phone_number(number): name for number, name in config['map'].items()}
+    except KeyError:
+        pass
 
     # validate maxMessages
     if config['maxMessages'] < 0:
@@ -269,13 +313,10 @@ def progress(verbose, stats, total):
     stats_frequency = 50
 
     def msg_stats():
-        return '{:04d}/{:04d} messages | {:.1f} % processed'.format(
-            i, total, i * 100 / total)
+        return f'{i:04d}/{total:04d} messages | {i * 100 / total:.1f} % processed'
 
     def size_stats():
-        return '{0:.1f}/{1:.1f} MiB'.format(
-            stats['saved_attachments_size'] / 2 ** 20,
-            stats['attachments_size'] / 2 ** 20)
+        return f'{stats["saved_attachments_size"] / 2 ** 20:.1f}/{stats["attachments_size"] / 2 ** 20:.1f} MiB'
 
     if verbose:
         def report():
