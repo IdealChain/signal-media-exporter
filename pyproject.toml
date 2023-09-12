@@ -11,7 +11,7 @@ include = [
 [tool.poetry.dependencies]
 python = "^3.6"
 coloredlogs = "^10.0"
-sqlcipher3-binary = "^0.4.5"
+sqlcipher3-binary = "^0.5.1"
 alive-progress = "^1.6.2"
 
 [tool.poetry.dev-dependencies]
