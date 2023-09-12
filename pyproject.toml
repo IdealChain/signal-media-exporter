@@ -9,10 +9,10 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.6"
-coloredlogs = "^10.0"
+python = "^3.7"
+coloredlogs = "^15.0.1"
 sqlcipher3-binary = "^0.5.1"
-alive-progress = "^1.6.2"
+alive-progress = "^3.1.4"
 
 [tool.poetry.dev-dependencies]
 rope = "^0.14.0"
