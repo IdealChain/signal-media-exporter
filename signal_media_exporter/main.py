@@ -43,35 +43,36 @@ def get_messages(config, key):
         logger.info('Own number: %s, device ID: %s', own_number, device_id)
 
         cond = []
+        cond.append("m.type in ('incoming', 'outgoing')")
 
         include = config.get('includeAttachments', "visual")
         if include == "visual":
-            cond.append("hasVisualMediaAttachments > 0")
+            cond.append("m.hasVisualMediaAttachments > 0")
         elif include == "file":
-            cond.append("hasFileAttachments > 0")
+            cond.append("m.hasFileAttachments > 0")
         elif include == "all":
-            cond.append("hasAttachments > 0")
+            cond.append("m.hasAttachments > 0")
         else:
             raise ValueError(f"Invalid value '{include}' for 'includeAttachments' in config ")
 
         if not config.get('includeExpiringMessages', False):
-            cond.append("expires_at is null")
+            cond.append("m.expires_at is null")
 
         c.execute(f"""
-            select id, json
-            from messages
+            select m.id, m.json, sender.e164
+            from messages m
+            join conversations conv on m.conversationId == conv.id
+            join conversations sender on m.sourceServiceId == sender.serviceId
             where {' and '.join(cond)}
             order by sent_at 
             {f'limit {config["maxMessages"]}' if config["maxMessages"] > 0 else ''}
         """)
 
         for row in c:
+            msg_id = row[0]
             msg = json.loads(row[1])
-
-            if 'source' not in msg and msg['type'] == 'outgoing':
-                msg['source'] = own_number
-
-            yield row[0], msg
+            sender = row[2]
+            yield msg_id, msg, sender
 
     except sqlite.DatabaseError as err:
         logger.fatal(
@@ -101,7 +102,7 @@ def hash_file_sha256(path):
         return sha256.hexdigest()
 
 
-def save_attachments(config, hashes, msg_id, msg):
+def save_attachments(config, hashes, msg_id, msg, sender):
     stats = {
         'attachments': 0,
         'attachments_size': 0,
@@ -113,7 +114,6 @@ def save_attachments(config, hashes, msg_id, msg):
         sent = datetime.fromtimestamp(msg['sent_at'] / 1000)
 
         # translate number of sender to name
-        sender = msg['source']
         if 'map' in config:
             sender = config['map'][sender]
 
