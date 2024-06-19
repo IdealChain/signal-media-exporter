@@ -80,4 +80,4 @@ You can either just use the similar command line parameters (see `signal-media-e
     - `"all"`: All attachments, including audio.
     - `"visual"`: Visual attachments, like JPG, PNG and GIF.
     - `"file"`: Any file attachment that isn't a visual attachment.
-* `map`: If you include this dict, only the media files sent by the listed numbers will be exported, and the supplied name will be used for the `outputDir` subdirectories (including your own number). If omitted, all media files will be exported using the senders' numbers as subdirectories. Phone numbers must be complete including the country code.
+* `map`: If you include this dict, only the media files sent by the listed key numbers, assigned names or profile names will be exported, and the supplied value name will be used for the `outputDir` subdirectories (including your own number). If omitted, all media files will be exported using the senders' numbers, where available, as subdirectories. Phone numbers must be given in complete E.164 format, including the country code.

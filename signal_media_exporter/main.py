@@ -59,20 +59,21 @@ def get_messages(config, key):
             cond.append("m.expires_at is null")
 
         c.execute(f"""
-            select m.id, m.json, sender.e164
+            select m.id, m.json, sender.e164, coalesce(sender.name, sender.profileFullName)
             from messages m
             join conversations conv on m.conversationId == conv.id
             join conversations sender on m.sourceServiceId == sender.serviceId
             where {' and '.join(cond)}
-            order by sent_at 
+            order by m.sent_at
             {f'limit {config["maxMessages"]}' if config["maxMessages"] > 0 else ''}
         """)
 
         for row in c:
             msg_id = row[0]
             msg = json.loads(row[1])
-            sender = row[2]
-            yield msg_id, msg, sender
+            sender_e164 = row[2]
+            sender_name = row[3]
+            yield msg_id, msg, sender_e164, sender_name
 
     except sqlite.DatabaseError as err:
         logger.fatal(
@@ -102,7 +103,7 @@ def hash_file_sha256(path):
         return sha256.hexdigest()
 
 
-def save_attachments(config, hashes, msg_id, msg, sender):
+def save_attachments(config, hashes, msg_id, msg, sender_e164, sender_name):
     stats = {
         'attachments': 0,
         'attachments_size': 0,
@@ -112,16 +113,26 @@ def save_attachments(config, hashes, msg_id, msg, sender):
 
     try:
         sent = datetime.fromtimestamp(msg['sent_at'] / 1000)
+    except KeyError:
+        logger.warning('Skipping %s (missing sent_at field)', msg_id)
+        return
 
-        # translate number of sender to name
-        if 'map' in config:
-            sender = config['map'][sender]
+    sender = None
+    sender_keys = [s for s in (sender_e164, sender_name) if s is not None]
 
-    except KeyError as e:
-        if e.args[0].startswith('+'):
-            logger.warning('Skipping %s (number not mapped: "%s")', msg_id, '.'.join(e.args))
-        else:
-            logger.warning('Skipping %s (field missing: "%s")', msg_id, '.'.join(e.args))
+    # with map, translate sender number or name to mapped name
+    if 'map' in config and len(sender_keys) > 0:
+        try:
+            sender = next(config['map'][k] for k in sender_keys if k in config['map'])
+        except StopIteration:
+            logger.warning('Skipping %s (sender number/name not mapped: %s)', msg_id, ", ".join(sender_keys))
+            return
+
+    # or without map, use number only (sender_name might not be valid and safe dir name)
+    elif sender_e164 is not None:
+        sender = sender_e164
+    else:
+        logger.warning('Skipping %s (sender number unknown)', msg_id)
         return
 
     for idx, at in enumerate(msg['attachments']):
@@ -190,6 +201,16 @@ def get_file_extension(at):
     if ';' in ext:
         ext = ext.split(';')[0]
     return ext
+
+
+def sanitize_sender_key(key: str) -> str:
+    """
+    Sanitize sender phone numbers or names.
+    """
+    key = key.strip()
+    if key.startswith('+'):
+        key = sanitize_phone_number(key)
+    return key
 
 
 def sanitize_phone_number(no: str) -> str:
@@ -279,7 +300,7 @@ def main():
     )
 
     try:
-        config['map'] = {sanitize_phone_number(number): name for number, name in config['map'].items()}
+        config['map'] = {sanitize_sender_key(key): name for key, name in config['map'].items()}
     except KeyError:
         pass
 
@@ -291,7 +312,12 @@ def main():
     # read the encrypted DB and run the export
     key = get_key(config)
     msgs = list(get_messages(config, key))
-    stats = {}
+    stats = {
+        'attachments': 0,
+        'attachments_size': 0,
+        'saved_attachments': 0,
+        'saved_attachments_size': 0,
+    }
     hashes = {}
 
     with progress(verbose, stats, len(msgs)) as report:
